@@ -88,6 +88,8 @@ class Meeting(Base):
     # "ready" / "waiting" (meeting ended, transcript not ready yet) / "none"
     # "recording" / "transcribing" (recorded on this PC) -> "ready"
     transcript_status: Mapped[str] = mapped_column(String(20), default="waiting")
+    # The people who joined the Google Meet call (Meet API): helps to name the voices
+    participants: Mapped[list[str] | None] = mapped_column(JSON, default=list)
 
     summary: Mapped["MeetingSummary | None"] = relationship(back_populates="meeting")
 
@@ -105,6 +107,8 @@ class MeetingSummary(Base):
     blockers: Mapped[list[str]] = mapped_column(JSON, default=list)
     keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
     key_facts: Mapped[list[str] | None] = mapped_column(JSON, default=list)  # budget, amounts
+    # Who each separated voice is: {"label": "Speaker 1", "name": "Omar", "clue": "..."}
+    speakers: Mapped[list[dict] | None] = mapped_column(JSON, default=list)
     output_language: Mapped[str] = mapped_column(String(10), default="same")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 

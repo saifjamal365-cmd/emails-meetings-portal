@@ -38,6 +38,7 @@ class SummaryOut(BaseModel):
     blockers: list[str]
     keywords: list[str]
     key_facts: list[str]
+    speakers: list[dict]  # who "Speaker 1", "Speaker 2" ... are
     output_language: str
     created_at: datetime
 
@@ -65,6 +66,7 @@ class LinkedEmailOut(BaseModel):
 
 class MeetingDetail(MeetingItem):
     transcript_text: str | None
+    participants: list[str]  # who joined the Google Meet call
     summary: SummaryOut | None
     logs: list[LogOut]  # "Integration logs"
     tasks: list[TaskOut]
@@ -126,6 +128,7 @@ def _detail(db: DbSession, m: Meeting) -> MeetingDetail:
     return MeetingDetail(
         **_item(m).model_dump(),
         transcript_text=m.transcript_text,
+        participants=m.participants or [],
         summary=SummaryOut(
             overview=s.overview,
             detected_language=s.detected_language,
@@ -135,6 +138,7 @@ def _detail(db: DbSession, m: Meeting) -> MeetingDetail:
             blockers=s.blockers or [],
             keywords=s.keywords or [],
             key_facts=s.key_facts or [],
+            speakers=s.speakers or [],
             output_language=s.output_language,
             created_at=s.created_at,
         )

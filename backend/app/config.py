@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     # Stop by itself when nobody talks for this many minutes (you left the meeting). Before
     # anybody has talked it waits twice as long (people join late). 0 = only at the end time.
     silence_stop_minutes: int = 5
+    # Separate the other people's voices on the speakers track ("Speaker 1", "Speaker 2" ...)
+    # with sherpa-onnx (free, on this computer; models ~37 MB in data_dir/speakers).
+    speaker_separation: bool = True
+    # How different two voices must be to count as two people. Smaller = more speakers.
+    speaker_threshold: float = 0.5
 
     # Daily planner: hour of the morning plan and of the end-of-day summary (-1 = off)
     morning_plan_hour: int = 8

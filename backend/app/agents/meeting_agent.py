@@ -48,6 +48,12 @@ class ActionItem(BaseModel):
     due: str = Field(description="YYYY-MM-DD, or empty if no date was said")
 
 
+class SpeakerName(BaseModel):
+    label: str = Field(description='The label in the transcript, e.g. "Speaker 1"')
+    name: str = Field(description="The person's name, or empty if it is not clear")
+    clue: str = Field(description="A few words: how you know")
+
+
 class MeetingOutput(BaseModel):
     """What the LLM returns for one meeting."""
 
@@ -59,6 +65,9 @@ class MeetingOutput(BaseModel):
     risks: list[str]
     blockers: list[str]
     keywords: list[str]
+    speakers: list[SpeakerName] = Field(
+        default_factory=list, description='Who each "Speaker N" in the transcript is'
+    )
 
 
 @dataclass
@@ -201,11 +210,13 @@ def summarize(
         raise ValueError("This transcript is too long to summarize in one step.")
 
     attendees = "\n".join(f"- {a}" for a in meeting.attendees) or "- (not known)"
+    joined = ", ".join(meeting.participants or [])
+    joined_line = f"Joined the call (Google Meet): {joined}\n" if joined else ""
     prompt = (
         f"Today is {date.today():%A %Y-%m-%d}.\n"
         f"{_who_am_i(db, meeting)}\n\n"
         f"Meeting: {meeting.title}\nDate: {meeting.date:%A %Y-%m-%d %H:%M}\n"
-        f"Organizer: {meeting.owner or '(not known)'}\nInvited:\n{attendees}\n\n"
+        f"Organizer: {meeting.owner or '(not known)'}\nInvited:\n{attendees}\n{joined_line}\n"
         f"{_meeting_words_hint(db)}"
         f"{LANGUAGE_RULE[output_language]} Keep the keywords in both languages as explained.\n\n"
         f"<transcript>\n{meeting.transcript_text}\n</transcript>"
@@ -229,6 +240,7 @@ def summarize(
     summary.blockers = out.blockers
     summary.keywords = out.keywords
     summary.key_facts = out.key_facts
+    summary.speakers = [s.model_dump() for s in out.speakers]
     summary.output_language = output_language
     summary.created_at = datetime.now()
     meeting.summary = summary
@@ -385,6 +397,20 @@ def stop_recording(background: bool = True) -> RecordingState | None:
     return state
 
 
+def _joined_the_call(db: Session, meeting: Meeting) -> list[str]:
+    """Who joined the Google Meet call. It helps the agent name "Speaker 1", "Speaker 2" ...
+    Zoom / Teams / "Record now" have no meeting code: nobody is listed."""
+    if not meeting.meeting_code:
+        return []
+    try:
+        return meeting_client.fetch_participants(
+            db, meeting.meeting_code, meeting.date, meeting.end_time or datetime.now()
+        )
+    except Exception:  # not needed for the summary: go on without the names
+        log.exception("Could not read who joined the call")
+        return []
+
+
 def process_recording(state: RecordingState) -> None:
     """Whisper transcript -> summary -> tasks and email links -> notification."""
     from app.db import SessionLocal  # here, to keep this module free of app start-up code
@@ -418,6 +444,7 @@ def process_recording(state: RecordingState) -> None:
             db.commit()
         else:
             meeting.transcript_text = text
+            meeting.participants = _joined_the_call(db, meeting)
             meeting.transcript_status = "ready"
             _log(db, "transcript_recorded", meeting, lines=text.count("\n") + 1,
                  minutes=round(state.seconds / 60))  # fmt: skip

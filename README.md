@@ -178,9 +178,19 @@ on your computer, for free:
    up to `RECORD_MAX_EXTRA_MINUTES`).
 4. **Whisper** (faster-whisper, model `WHISPER_MODEL`, default `large-v3-turbo`) writes the
    transcript on your computer - private and offline. The first time it downloads the model (~1.6 GB)
-   into `backend/data/whisper`. Your name is on your lines, "Others" on the rest.
-5. The Meeting agent summarizes it, adds your tasks and links emails. The audio is deleted
-   (unless `KEEP_RECORDINGS=true`). You get "Meeting summarized: ...".
+   into `backend/data/whisper`. Your name is on your lines.
+5. **Who is speaking:** the speakers track has all the other people mixed together, so the
+   portal separates it by voice (speaker diarization with **sherpa-onnx**, free and offline;
+   the two models, ~37 MB, are downloaded once into `backend/data/speakers` and checked with
+   SHA-256). Their lines get **"Speaker 1"**, **"Speaker 2"** ... For Google Meet calls the
+   portal also reads **who joined the call** (Meet API, free accounts too).
+6. The Meeting agent summarizes it and **names the voices** from what was said ("معكم عمر",
+   somebody answers when called by name) and from who joined. When a named speaker says "I
+   will ...", the task goes to that person. It adds your tasks and links emails. The audio is
+   deleted (unless `KEEP_RECORDINGS=true`). You get "Meeting summarized: ...".
+
+The meeting page shows **Joined the call**, a **Who spoke** table (Speaker 1 -> Omar, and
+why), and the names inside the transcript ("Speaker 1 (Omar): ...").
 
 For a meeting that is not in your calendar: **Meetings -> Record now -> Stop**.
 
@@ -197,6 +207,12 @@ Good to know:
   best Arabic but needs about 6 seconds of CPU per second of speech, so a 1-hour meeting is
   ready a few hours later, in the background. `small` is about 5x faster but weak for spoken
   Arabic. Change it with `WHISPER_MODEL` in `backend/.env`.
+- Voice separation adds about 12% of the meeting time (about 7 minutes for 1 hour). It is
+  careful: one person can get two labels ("Speaker 1" and "Speaker 3"), but a label is not
+  shared by two people - the agent then gives both labels the same name. Voices without a
+  clue stay "not known". Turn it off with `SPEAKER_SEPARATION=false` (everybody is "Others").
+- Hard for any voice separation: very short answers ("تمام"), two people talking at once,
+  and several people on one laptop.
 
 ## How the Meeting agent gets transcripts
 

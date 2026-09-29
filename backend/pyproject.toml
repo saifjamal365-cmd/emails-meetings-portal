@@ -26,6 +26,7 @@ dependencies = [
     "faster-whisper>=1.2",              # speech-to-text on this computer (meeting recorder)
     "soundcard>=0.4.6",                 # record microphone + speakers (meeting recorder)
     "numpy>=2.0",                       # audio samples
+    "sherpa-onnx>=1.13",                # separate the other people's voices (meeting recorder)
 ]
 
 [project.optional-dependencies]

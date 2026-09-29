@@ -84,10 +84,10 @@ def summary_output():
 def test_merge_puts_both_tracks_in_time_order_with_names() -> None:
     start = datetime(2026, 9, 28, 10, 0, 0)
     me = [(5.0, "I will send the price list."), (130.0, "Thanks all.")]
-    others = [(60.0, "السلام عليكم، نحتاج العرض قبل الخميس")]
+    others = [(60.0, "Speaker 1", "السلام عليكم، نحتاج العرض قبل الخميس")]
     assert transcriber.merge(me, others, start, "Saif jamal") == (
         "[10:00] Saif jamal: I will send the price list.\n"
-        "[10:01] Others: السلام عليكم، نحتاج العرض قبل الخميس\n"
+        "[10:01] Speaker 1: السلام عليكم، نحتاج العرض قبل الخميس\n"
         "[10:02] Saif jamal: Thanks all."
     )
 

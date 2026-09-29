@@ -11,6 +11,9 @@ const LANGUAGES = [
 const LOG_TEXT = {
   transcript_downloaded: (d) => `Transcript downloaded from Google Meet (${d.lines} lines)`,
   transcript_uploaded: (d) => `Transcript uploaded (${d.lines} lines)`,
+  recording_started: () => 'Recording started on this computer',
+  recording_recovered: () => 'Recording finished after a restart',
+  transcript_recorded: (d) => `Transcript written by the recorder (${d.lines} lines, ${d.minutes} min)`,
   summarized: (d) => `Summarized by ${d.model} (${d.input_tokens} in / ${d.output_tokens} out tokens)`,
   tasks_created: (d) => `${d.count} task${d.count === 1 ? '' : 's'} created: ${d.titles.join('; ')}`,
   emails_linked: (d) => `${d.email_ids.length} unread email${d.email_ids.length === 1 ? '' : 's'} linked to this meeting`,
@@ -22,6 +25,14 @@ function Section({ title, children }) {
       <h4 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h4>
       {children}
     </section>
+  )
+}
+
+// "[10:01] Speaker 1: ..." -> "[10:01] Speaker 1 (Omar): ..." when the agent found the name.
+function withNames(transcript, speakers = []) {
+  const names = Object.fromEntries((speakers || []).filter((sp) => sp.name).map((sp) => [sp.label, sp.name]))
+  return transcript.replace(/^(\[[^\]]*\] )(Speaker \d+):/gm, (line, time, label) =>
+    names[label] ? `${time}${label} (${names[label]}):` : line,
   )
 }
 
@@ -88,6 +99,12 @@ export default function MeetingDetail({ meetingId, onChanged }) {
             {meeting.attendees.join(', ')}
           </p>
         )}
+        {meeting.participants.length > 0 && (
+          <p dir="auto" className="text-sm text-slate-600">
+            <span className="font-medium text-slate-900">Joined the call: </span>
+            {meeting.participants.join(', ')}
+          </p>
+        )}
       </Section>
 
       <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3">
@@ -132,6 +149,23 @@ export default function MeetingDetail({ meetingId, onChanged }) {
           {s.key_facts?.length > 0 && (
             <Section title="Key facts">
               <List items={s.key_facts} />
+            </Section>
+          )}
+
+          {s.speakers?.length > 0 && (
+            <Section title="Who spoke">
+              <p className="mb-1 text-xs text-slate-500">
+                The other people&apos;s voices were separated on this computer. Names come from what was said and
+                from who joined the call. One person can have two labels.
+              </p>
+              <ul className="space-y-1 text-sm" dir="auto">
+                {s.speakers.map((sp) => (
+                  <li key={sp.label}>
+                    <span className="font-medium">{sp.label}</span> → {sp.name || <span className="text-slate-500">not known</span>}
+                    {sp.clue && <span className="text-slate-500"> · {sp.clue}</span>}
+                  </li>
+                ))}
+              </ul>
             </Section>
           )}
 
@@ -220,7 +254,7 @@ export default function MeetingDetail({ meetingId, onChanged }) {
         <details className="rounded-md border border-slate-200 bg-white p-3">
           <summary className="cursor-pointer text-sm font-medium">Transcript</summary>
           <pre dir="auto" className="mt-2 max-h-96 overflow-y-auto whitespace-pre-wrap font-sans text-sm">
-            {meeting.transcript_text}
+            {withNames(meeting.transcript_text, s?.speakers)}
           </pre>
         </details>
       )}

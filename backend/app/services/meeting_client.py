@@ -226,6 +226,27 @@ def fetch_transcript(db: Session, meeting: CalendarMeeting) -> TranscriptResult:
     return TranscriptResult(status="ready", text="\n".join(lines), conference_record=name)
 
 
+def fetch_participants(db: Session, meeting_code: str, start: datetime, end: datetime) -> list[str]:
+    """Names of the people who joined the Google Meet call (works on free accounts too).
+    Joining again after everybody left makes a new conference, so all of them are read."""
+    meet = google_client.service(db, "meet", "v2")
+    records = meet.conferenceRecords()
+    window = (
+        f'space.meeting_code = "{meeting_code}" '
+        f'AND start_time >= "{_rfc3339(start - timedelta(hours=1))}" '
+        f'AND start_time <= "{_rfc3339(end)}"'
+    )
+    names: list[str] = []
+    for record in _all_pages(records.list, "conferenceRecords", filter=window):
+        for person in _all_pages(
+            records.participants().list, "participants", parent=record["name"]
+        ):
+            name = _speaker(person)
+            if name != "Unknown speaker" and name not in names:
+                names.append(name)
+    return names
+
+
 # ---- Uploaded files (backup when there is no API transcript) ----------------------
 
 _VTT_TIME = re.compile(r"^\d{2}:\d{2}(:\d{2})?[.,]\d{3}\s+-->")
