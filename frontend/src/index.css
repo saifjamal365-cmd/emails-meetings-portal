@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+/* Arabic text: use dir="auto" on text blocks so each block picks its own direction. */
+body {
+  @apply bg-slate-50 text-slate-900;
+}

@@ -1,0 +1,28 @@
+# Render blueprint: Render -> New -> Blueprint -> choose this repository.
+# Fill the secret values in the Render dashboard (they are never stored in this file).
+services:
+  - type: web
+    name: email-meeting-portal
+    runtime: docker
+    plan: starter # a persistent disk needs a paid plan
+    numInstances: 1 # keep one: background jobs run inside the app
+    healthCheckPath: /api/health
+    disk:
+      name: portal-data
+      mountPath: /data # the SQLite database and the key files
+      sizeGB: 1
+    envVars:
+      - key: PORTAL_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN # https://<your-app>.onrender.com
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI # https://<your-app>.onrender.com/api/auth/google/callback
+        sync: false

@@ -1,0 +1,37 @@
+# Secrets
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Local database (recreated on start)
+backend/data/*.db
+backend/data/*.key
+# Speech-to-text model (downloaded, ~0.5 GB) and meeting audio (private)
+backend/data/whisper/
+backend/data/recordings/
+
+# Frontend
+node_modules/
+dist/
+
+# Logs
+logs/
+*.log
+
+# Editor / tooling
+.claude/
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
+~$*
