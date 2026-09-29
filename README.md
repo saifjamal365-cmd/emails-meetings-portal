@@ -77,6 +77,25 @@ email-meeting-portal/
 - Rule-based emails (social, newsletters, no-reply, "Always Low") never use the LLM, so
   adding senders to "Always Low" saves your free quota.
 
+## Everyday use: one server that starts with Windows
+
+The portal runs as **one hidden server** (`backend/run_portal.py`): the backend also serves the
+built portal, so you only open **http://localhost:8000**. A Windows Task Scheduler task
+**"Email Meeting Portal"** starts it every time you log in (your user only, works on battery,
+no time limit). The log is in `backend/data/logs/portal.log`.
+
+Useful commands (PowerShell):
+
+```powershell
+Start-ScheduledTask -TaskName "Email Meeting Portal"      # start now
+Stop-ScheduledTask -TaskName "Email Meeting Portal"       # stop
+Get-Content backend\data\logs\portal.log -Tail 30        # see the last log lines
+Unregister-ScheduledTask -TaskName "Email Meeting Portal" -Confirm:$false   # remove auto-start
+```
+
+After you change the frontend, build it again (`cd frontend && npm run build`) and restart
+the task. For development with live reload, stop the task and use the two commands below.
+
 ## Run it (Windows)
 
 **1. Backend** (first time only: create the `.env` file)
