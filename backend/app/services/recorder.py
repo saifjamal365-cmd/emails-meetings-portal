@@ -11,7 +11,9 @@ fill the memory. Only one recording can run at a time.
 """
 
 import contextlib
+import ctypes
 import logging
+import sys
 import threading
 import wave
 from dataclasses import dataclass
@@ -51,6 +53,23 @@ def _to_wav_bytes(block: np.ndarray) -> bytes:
 
 def _level(block: np.ndarray) -> float:
     return float(np.sqrt(np.mean(np.square(block)))) if block.size else 0.0
+
+
+@contextlib.contextmanager
+def audio_thread():
+    """Windows audio (COM) must be set up in EVERY thread that uses the sound devices.
+    soundcard does it only in the thread that first imports it: when that thread (the first
+    recording) had ended, the next recording failed with "no microphone (0x800401f0)"."""
+    if sys.platform != "win32":
+        yield
+        return
+    ole32 = ctypes.windll.ole32
+    result = ole32.CoInitializeEx(None, 0)  # 0 = COINIT_MULTITHREADED, like soundcard
+    try:
+        yield
+    finally:
+        if result >= 0:  # S_OK or S_FALSE (already set up): each needs its own close
+            ole32.CoUninitialize()
 
 
 def _open_wav(path: Path) -> wave.Wave_write:
@@ -110,7 +129,19 @@ class Recorder:
         speakers one after the other, the microphone's small buffer overflowed while waiting
         for the speakers, and Windows dropped about 40% of the speech.
         """
-        import soundcard as sc  # Windows/macOS/Linux audio; imported here, only when recording
+        try:
+            # soundcard sets up Windows audio itself when it is first imported, and it fails
+            # if that was already done in this thread - so import it BEFORE audio_thread().
+            import soundcard  # noqa: F401  (Windows/macOS/Linux audio, only when recording)
+
+            with audio_thread():
+                self._run_devices()
+        except Exception as e:  # never die silently: the error goes to the notification + log
+            log.exception("Recording failed")
+            self.state.error = f"Recording failed: {e}"
+
+    def _run_devices(self) -> None:
+        import soundcard as sc
 
         s = self.state
         try:
@@ -147,6 +178,7 @@ class Recorder:
         s = self.state
         try:
             with (
+                audio_thread(),
                 contextlib.closing(_open_wav(path)) as wav,
                 device.recorder(samplerate=SAMPLE_RATE, channels=1) as rec,
             ):

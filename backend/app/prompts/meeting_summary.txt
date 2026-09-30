@@ -4,6 +4,8 @@ The transcript may be in Arabic (often Jordanian dialect), English, or both mixe
 
 In meetings recorded on the user's computer, every line from the user's microphone has the user's name. The other people's voices were separated automatically: "Speaker 1", "Speaker 2" ... (the same label = the same voice; the separation can make small mistakes, and one person can sometimes get two labels). "Others" means the voices were not separated. The name at the start of a line is only WHO SPOKE - it is NOT who must do a task.
 
+Sometimes the message also has Google Meet's live captions of the same call (<captions>), with the speaker's real name on every line. Use them to see who said what (these names are reliable) and to fix words the transcript heard wrong. The transcript stays the main text; the captions can have their own mistakes, especially in Arabic.
+
 Return:
 - overview: 3 to 5 sentences: what the meeting was about and what came out of it.
 - detected_language: the main language of the meeting ("ar", "en" or "mixed").
@@ -15,14 +17,16 @@ Return:
         - "Omar said he will review the plan" -> Omar.
         - "I will send ..." / "أنا رح ..." -> the person who spoke the line (for a "Speaker N" line: that speaker's name from "speakers" below, or the label "Speaker N" when the name is not known).
         - "we will ...", "someone must ...", "لازم حدا ..." with no clear person -> "Unassigned".
-    - owner_is_me: true only when the owner is the user (see "The user" below).
+        - A task for several people or for each of them ("each of you make a plan", "كل واحد يعمل بلان", "Sami and Hala, test the login") -> ONE action item for EACH of those people, with their name as owner. "Each of you" means the people the speaker talks to - not the speaker. Use the names from "Joined the call" and the speakers; if the names are not known, one item with the owner "Everyone".
+    - owner_is_me: true ONLY when the task is clearly the user's: the user said "I will ..." on a line with the user's name, somebody gave the task to the user by name ("<the user's name>، ابعت العرض"), or the user agreed to do it. Always false for "Unassigned" or "Everyone", for a "Speaker N" or "Others" owner, for "we"/"someone", and whenever you are not sure. These tasks go into the user's own task list: a task missing there is much better than another person's task there.
     - due: the due date as YYYY-MM-DD. Turn relative dates into real dates from today's date and weekday: "tomorrow"/"بكرة", "on Thursday"/"يوم الخميس", "next Monday"/"الاثنين الجاي", "end of the week"/"نهاية الأسبوع", "end of next month"/"نهاية الشهر الجاي". Empty string only if no time was said.
 - decisions: what the group agreed or decided. If a decision was changed in the meeting, write only the FINAL decision and say what changed ("Launch moved from 20 October to 3 November after talking with the supplier").
 - risks: things that MIGHT go wrong LATER (the supplier may raise prices, someone may leave).
 - blockers: things that stop work NOW (waiting for an approval, a server that is not ready).
 - speakers: one item for every "Speaker N" label in the transcript (empty list when there are none): who that voice is.
-    - name: only when the words show it: the person says their name ("معكم عمر"), somebody talks to them by name and they answer ("شو رأيك يا أحمد؟" -> the next speaker is likely Ahmad), or they talk about their own part that another line gives to a named person. Use the spelling from "Joined the call" when it is given. If exactly one other person joined the call, every "Speaker N" is that person. Empty when you cannot tell - do not guess.
+    - name: only when the words show it: the person says their name ("معكم عمر"), somebody talks to them by name and they answer ("شو رأيك يا أحمد؟" -> the next speaker is likely Ahmad), or they talk about their own part that another line gives to a named person. Use the spelling from "Joined the call" when it is given. If exactly one other person joined the call, every "Speaker N" is that person. "Voices already known" in the message are reliable: use those names. Empty when you cannot tell - do not guess.
     - clue: a few words on how you know ("answered when called Omar").
+    - name_quote: the exact words, copied from THIS speaker's own line, where they say their own name ("معكم عمر", "this is Sara"). Empty when they did not say their own name - also when somebody else called them by name. (It is checked against the transcript; it teaches the portal this voice for the next meetings.)
 - keywords: 5 to 15 important names: projects, clients, companies, products, contracts, places. No common words like "meeting", "update" or "project". When a keyword was said in Arabic, also give the English form, and the other way around (for example "العقد" and "contract"), because emails in both languages will be matched against these keywords.
 
 Rules:

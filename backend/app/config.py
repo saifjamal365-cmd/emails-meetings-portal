@@ -78,11 +78,23 @@ class Settings(BaseSettings):
     # Stop by itself when nobody talks for this many minutes (you left the meeting). Before
     # anybody has talked it waits twice as long (people join late). 0 = only at the end time.
     silence_stop_minutes: int = 5
+    # With the Google Meet browser extension, Meet calls are recorded from the moment you join
+    # until you leave. If it did not report your joining this many minutes after the calendar
+    # start (joined from the phone? extension off?), recording starts by the calendar anyway.
+    meet_join_wait_minutes: int = 5
+    # Leaving for less than this (a page reload, a short network drop) does not stop it.
+    leave_grace_seconds: int = 60
     # Separate the other people's voices on the speakers track ("Speaker 1", "Speaker 2" ...)
-    # with sherpa-onnx (free, on this computer; models ~37 MB in data_dir/speakers).
+    # with sherpa-onnx (free, on this computer; models ~46 MB in data_dir/speakers).
     speaker_separation: bool = True
     # How different two voices must be to count as two people. Smaller = more speakers.
     speaker_threshold: float = 0.5
+    # After the separation: two labels whose whole voice prints are this close (0-1) are one
+    # person. Lower = more merging.
+    voice_merge_threshold: float = 0.6
+    # Voice memory: how close a voice must be to a remembered one to get its name (0-1).
+    # High on purpose: "not known" is better than a wrong name.
+    voice_match_threshold: float = 0.6
 
     # Daily planner: hour of the morning plan and of the end-of-day summary (-1 = off)
     morning_plan_hour: int = 8

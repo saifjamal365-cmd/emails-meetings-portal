@@ -20,6 +20,7 @@ from app.routes import (
     auth,
     data,
     emails,
+    extension,
     google_auth,
     health,
     llm,
@@ -28,6 +29,7 @@ from app.routes import (
     reports,
     settings,
     tasks,
+    voices,
 )
 
 config = get_settings()
@@ -107,6 +109,8 @@ for module in (
     data,
     google_auth,
     settings,
+    voices,
+    extension,
 ):
     app.include_router(module.router, prefix="/api")
 

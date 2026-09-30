@@ -181,16 +181,71 @@ on your computer, for free:
    into `backend/data/whisper`. Your name is on your lines.
 5. **Who is speaking:** the speakers track has all the other people mixed together, so the
    portal separates it by voice (speaker diarization with **sherpa-onnx**, free and offline;
-   the two models, ~37 MB, are downloaded once into `backend/data/speakers` and checked with
+   the two models, ~46 MB, are downloaded once into `backend/data/speakers` and checked with
    SHA-256). Their lines get **"Speaker 1"**, **"Speaker 2"** ... For Google Meet calls the
    portal also reads **who joined the call** (Meet API, free accounts too).
-6. The Meeting agent summarizes it and **names the voices** from what was said ("معكم عمر",
-   somebody answers when called by name) and from who joined. When a named speaker says "I
-   will ...", the task goes to that person. It adds your tasks and links emails. The audio is
-   deleted (unless `KEEP_RECORDINGS=true`). You get "Meeting summarized: ...".
+6. **Echo protection:** without headphones the others' voices also reach your microphone,
+   and their words would get your name. Lines on your microphone that repeat what the others
+   said at the same moment are dropped (your answer a few seconds later is kept).
+7. The Meeting agent summarizes it and **names the voices**: from the **voice memory** (below),
+   from what was said ("معكم عمر", somebody answers when called by name) and from who joined.
+   When a named speaker says "I will ...", the task goes to that person. It adds your tasks
+   and links emails. The audio is deleted (unless `KEEP_RECORDINGS=true`). You get "Meeting
+   summarized: ...".
 
 The meeting page shows **Joined the call**, a **Who spoke** table (Speaker 1 -> Omar, and
-why), and the names inside the transcript ("Speaker 1 (Omar): ...").
+how: voice memory / from the talk / named by you, with **Name** for a voice nobody named),
+and the names inside the transcript ("Speaker 1 (Omar): ...").
+
+**Only your own tasks go to Daily Tasks.** This is checked twice: the agent must be sure the
+task is yours, and then the code stops any task whose owner is a voice label ("Speaker 2"),
+"Unassigned", or another person who joined or spoke. Stopped tasks are listed in the
+Integration logs. A task missing from your list is better than another person's task in it.
+
+### Google Meet helper (browser extension, folder `extension/`)
+
+The portal's own small extension for Chrome or Edge makes Google Meet calls fully automatic:
+- **Records from joining to leaving.** When you join a call, the recorder starts (early, late,
+  or a call that is not in the calendar); when you leave, it stops (after 60 seconds, so a page
+  reload does not stop it). While you are in the call, silence and the calendar end do not
+  stop it. With the helper, the calendar waits for your join; if you did not join on this
+  computer 5 minutes after the start (`MEET_JOIN_WAIT_MINUTES`), it records by the calendar.
+- **Turns on Google Meet's live captions** by itself, and notes **who speaks when** (and the
+  caption words).
+- **Names every voice**: the voice that talks while the captions show "Sami" is Sami. Shown as
+  "Google Meet" in Who spoke. The voice memory learns from these names (when it is on).
+- **Helps the summary**: the named captions go to the Meeting agent with the transcript, to
+  see who said what and fix misheard words.
+
+Install once: `chrome://extensions` (or `edge://extensions`) -> **Developer mode** on ->
+**Load unpacked** -> choose `week8\email-meeting-portal\extension`. Then open the portal: the
+extension connects by itself (the logged-in portal page gives it a key; nothing to type).
+Settings shows **Connected** when it works.
+
+Privacy: the extension sends only to the portal on this computer (`127.0.0.1:8000`), with its
+key. It sends call join/leave times, speaker names, times and caption words - no audio.
+"Delete my data" deletes the saved captions. A "joined" message older than 2 minutes (the
+portal was off) is ignored, so it can never start a recording late. Its health report
+("captions on", "lines read") is written to `backend/data/logs/portal.log`.
+
+Limits: Google can change the Meet page; the extension looks for things that rarely change
+(the call_end and closed_caption icons, the captions region, the speakers' pictures). Google
+Meet's captions follow Meet's caption language (English by default): with Arabic speech the
+caption words may be wrong, but the speaker names and times - what the portal needs - are right.
+
+### Voice memory (Settings -> Remember voices, off by default)
+
+The portal can know people **by their voice**, even when nobody says their name:
+- It **learns** a voice when the person says their own name ("معكم عمر"), or when only one
+  other person joined the call - or when you name a voice once on a meeting page.
+- In the next meetings every voice is compared with the remembered ones. A close and clear
+  match (`VOICE_MATCH_THRESHOLD`, default 0.6, and clearly closer than to anybody else) gets
+  the name. Otherwise it stays "not known": a wrong name is worse than no name.
+- Tested with two computer voices: meeting A learned "Sara" and "Omar" from their names;
+  in meeting B nobody said a name and they were recognized (96% and 92% match).
+- A voice print is **biometric personal data**: turn this on only after the people agreed.
+  The prints stay on this computer, encrypted (like the Google login), and can be deleted
+  one by one or all in Settings; "Delete my data" deletes them too.
 
 For a meeting that is not in your calendar: **Meetings -> Record now -> Stop**.
 
@@ -207,10 +262,19 @@ Good to know:
   best Arabic but needs about 6 seconds of CPU per second of speech, so a 1-hour meeting is
   ready a few hours later, in the background. `small` is about 5x faster but weak for spoken
   Arabic. Change it with `WHISPER_MODEL` in `backend/.env`.
-- Voice separation adds about 12% of the meeting time (about 7 minutes for 1 hour). It is
-  careful: one person can get two labels ("Speaker 1" and "Speaker 3"), but a label is not
-  shared by two people - the agent then gives both labels the same name. Voices without a
-  clue stay "not known". Turn it off with `SPEAKER_SEPARATION=false` (everybody is "Others").
+- Voice separation adds about 15% of the meeting time (about 9 minutes for 1 hour). The
+  voice-print model is NVIDIA NeMo **TitaNet small** - of five models tried it told voices
+  apart best for its speed. Turn it off with `SPEAKER_SEPARATION=false` (everybody is
+  "Others").
+- **One person, one label.** In real calls with short turns, one person often got several
+  labels (3 trainees got 8). After the separation, labels whose whole voice prints are close
+  are merged (`VOICE_MERGE_THRESHOLD`, default 0.6), a label with a word or two ("سامعيني")
+  joins the voice next to it, and for Google Meet there are never more voices than people who
+  joined. (Test: 7 forced labels for 2 voices -> 2, nothing given to the wrong person.)
+- **"Sure" is checked, not trusted.** The voice memory learns only when the person says their
+  own name on their own line (the agent must quote the words, and the code finds them on that
+  speaker's line) or when only one other person joined. Being called by name is not enough.
+- **"Each of you …"** ("كل واحد يعمل بلان") becomes one task for each person, never yours.
 - Hard for any voice separation: very short answers ("تمام"), two people talking at once,
   and several people on one laptop.
 

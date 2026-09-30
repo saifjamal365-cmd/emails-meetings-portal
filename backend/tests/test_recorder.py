@@ -1,6 +1,10 @@
 """Meeting recorder: calendar -> record -> Whisper -> summary. Fake audio, Whisper and LLM."""
 
+import os
+import subprocess
+import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -162,9 +166,11 @@ def test_recording_is_transcribed_summarized_and_files_deleted(db, rec, monkeypa
 
     seen = {}
 
-    def fake_transcribe(me_file, others_file, started_at, me_name, words=None):
+    def fake_transcribe(me_file, others_file, started_at, me_name, words=None, max_voices=None):
         seen["me_name"] = me_name
-        return "[10:00] Saif jamal: I will send the price list.\n[10:01] Others: شكراً"
+        return transcriber.Transcript(
+            "[10:00] Saif jamal: I will send the price list.\n[10:01] Others: شكراً"
+        )
 
     monkeypatch.setattr(transcriber, "transcribe_meeting", fake_transcribe)
     monkeypatch.setattr(
@@ -190,7 +196,9 @@ def test_recording_is_transcribed_summarized_and_files_deleted(db, rec, monkeypa
 
 def test_silent_recording_gives_a_clear_message(db, rec, monkeypatch) -> None:
     meeting = meeting_agent.start_recording(db, "Quiet call", NOW + timedelta(hours=1))
-    monkeypatch.setattr(transcriber, "transcribe_meeting", lambda *a: "")
+    monkeypatch.setattr(
+        transcriber, "transcribe_meeting", lambda *a, **k: transcriber.Transcript("")
+    )
 
     meeting_agent.stop_recording(background=False)
 
@@ -301,6 +309,71 @@ def test_restart_finishes_a_cut_off_recording(db, rec, monkeypatch, tmp_path) ->
     assert db.get(Meeting, lost.id).transcript_status == "none"
 
 
+def test_a_failed_recording_is_finished_not_stuck(db, rec, monkeypatch) -> None:
+    """The recording thread ended by itself (no microphone): the meeting must not stay on
+    "recording" - it is finished, with the error in a notification."""
+    meeting = meeting_agent.start_recording(db, "Daily QA", NOW + timedelta(hours=1))
+    rec.running = False  # the thread died at once
+    rec.state.error = "Recording failed: no microphone (Error 0x800401f0)"
+    monkeypatch.setattr(meeting_agent.threading, "Thread", _RunNow)
+
+    assert meeting_agent.recorder_tick(db) == "stopped (failed)"
+
+    db.expire_all()
+    assert db.get(Meeting, meeting.id).transcript_status == "none"
+    assert any("0x800401f0" in n.body for n in db.query(Notification).all())
+    assert meeting_agent.recorder_tick(db) == "off"  # finished once, not again
+
+
+def test_audio_setup_works_in_a_new_thread() -> None:
+    """Every recording thread sets up Windows audio itself (the second recording failed)."""
+    import threading
+
+    from app.services.recorder import audio_thread
+
+    errors = []
+
+    def work():
+        try:
+            with audio_thread(), audio_thread():  # also safe when already set up
+                pass
+        except Exception as e:  # pragma: no cover - would be the bug
+            errors.append(e)
+
+    t = threading.Thread(target=work)
+    t.start()
+    t.join()
+    assert errors == []
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32" or not os.environ.get("PORTAL_AUDIO_TEST"),
+    reason="uses the real microphone and speakers: set PORTAL_AUDIO_TEST=1 to run it",
+)
+def test_first_and_second_recording_after_a_restart(tmp_path) -> None:
+    """Two bugs of 30 Sep 2026, in a fresh process like after a restart: the 2nd recording failed
+    (Windows audio not set up in its thread), then the fix broke the 1st one (set up before
+    soundcard's own setup). Both must stay alive with no error."""
+    backend = Path(__file__).resolve().parents[1]
+    code = f"""
+import sys, time
+sys.path.insert(0, {str(backend)!r})
+from datetime import datetime, timedelta
+from pathlib import Path
+from app.services.recorder import Recorder
+for n in (1, 2):
+    rec = Recorder()
+    rec.start(n, "t", datetime.now() + timedelta(minutes=1), Path({str(tmp_path)!r}))
+    time.sleep(1.5)
+    print(n, rec.running, repr(rec.state.error))
+    rec.stop()
+"""
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=90)
+    for wav in tmp_path.glob("*.wav"):  # a second of room sound: do not keep it
+        wav.unlink()
+    assert "1 True ''" in out.stdout and "2 True ''" in out.stdout, out.stdout + out.stderr
+
+
 class _RunNow:
     """Runs the thread's work at once (tests do not wait for real threads)."""
 
@@ -343,7 +416,9 @@ def test_meeting_words_reach_whisper_and_the_summary(client, db, rec, monkeypatc
     monkeypatch.setattr(
         transcriber,
         "transcribe_meeting",
-        lambda me, others, started, name, words: seen.update(words=words) or "Saif jamal: hi",
+        lambda me, others, started, name, words, **k: (
+            seen.update(words=words) or transcriber.Transcript("Saif jamal: hi")
+        ),
     )
     prompts = []
 

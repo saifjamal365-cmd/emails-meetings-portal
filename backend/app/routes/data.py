@@ -1,4 +1,5 @@
-"""DELETE /api/data - "Delete my data": remove all saved emails, meetings, tasks and plans.
+"""DELETE /api/data - "Delete my data": remove all saved emails, meetings, tasks, plans and
+remembered voices.
 
 The emails stay in Gmail and the meetings in Google; only the portal's copies are deleted.
 Settings and the Google connection are kept (disconnect Google separately in Settings).
@@ -15,10 +16,13 @@ from app.models import (
     Email,
     EmailAnalysis,
     EmailMeetingLink,
+    MeetCaption,
     Meeting,
     MeetingSummary,
+    MeetingVoice,
     Notification,
     Task,
+    VoicePrint,
 )
 
 router = APIRouter(prefix="/data", tags=["data"])
@@ -29,7 +33,10 @@ TABLES = [
     EmailAnalysis,
     Email,
     MeetingSummary,
+    MeetingVoice,
     Meeting,
+    MeetCaption,  # Google Meet captions from the browser extension
+    VoicePrint,  # remembered voices (biometric data)
     Task,
     DailyReport,
     ActivityLog,

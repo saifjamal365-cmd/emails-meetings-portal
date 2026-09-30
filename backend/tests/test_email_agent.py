@@ -240,6 +240,7 @@ def test_settings_are_cleaned(client) -> None:
         "auto_summarize": False,
         "auto_record": False,
         "meeting_words": [],
+        "remember_voices": False,  # voice prints are biometric data: off until turned on
     }
 
 

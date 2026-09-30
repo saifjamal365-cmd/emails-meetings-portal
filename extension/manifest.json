@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Email & Meeting Portal - Meet helper",
+  "version": "1.0.0",
+  "description": "Tells your Email & Meeting Portal (on this computer) when you join and leave a Google Meet call, and who speaks when (from the live captions).",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": ["http://localhost:8000/*", "http://127.0.0.1:8000/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["meet.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["http://localhost:8000/*", "http://127.0.0.1:8000/*"],
+      "js": ["portal.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

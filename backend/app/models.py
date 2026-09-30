@@ -90,6 +90,9 @@ class Meeting(Base):
     transcript_status: Mapped[str] = mapped_column(String(20), default="waiting")
     # The people who joined the Google Meet call (Meet API): helps to name the voices
     participants: Mapped[list[str] | None] = mapped_column(JSON, default=list)
+    # Voices named from Google Meet's captions (the browser extension):
+    # {"Speaker 2": {"name": "Sami Kharroub", "share": 0.9}}
+    meet_names: Mapped[dict | None] = mapped_column(JSON, default=dict)
 
     summary: Mapped["MeetingSummary | None"] = relationship(back_populates="meeting")
 
@@ -113,6 +116,51 @@ class MeetingSummary(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     meeting: Mapped[Meeting] = relationship(back_populates="summary")
+
+
+class VoicePrint(Base):
+    """A remembered voice (Settings -> Remember voices). A voice print is biometric personal
+    data: it stays on this computer, encrypted, and can be deleted in Settings."""
+
+    __tablename__ = "voice_prints"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True)
+    print_encrypted: Mapped[str] = mapped_column(Text)  # the average voice print, encrypted
+    meetings: Mapped[int] = mapped_column(Integer, default=1)  # how many meetings it learned from
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class MeetingVoice(Base):
+    """One separated voice in a recorded meeting ("Speaker 2"), kept so it can be named later.
+    Only saved while Remember voices is on."""
+
+    __tablename__ = "meeting_voices"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(ForeignKey("meetings.id"), index=True)
+    label: Mapped[str] = mapped_column(String(20))  # "Speaker 2"
+    print_encrypted: Mapped[str] = mapped_column(Text)
+    name: Mapped[str | None] = mapped_column(String(200))  # who it is, when known
+    # "voice" (voice memory) / "talk" (the agent was sure from what was said) / "you"
+    named_by: Mapped[str | None] = mapped_column(String(10))
+    match_score: Mapped[float | None] = mapped_column(Float)  # similarity to the remembered voice
+    learned: Mapped[bool | None] = mapped_column(Boolean, default=False)  # added to the memory
+
+
+class MeetCaption(Base):
+    """One caption line from a Google Meet call, sent by the portal's browser extension:
+    WHO spoke WHEN (and the caption text). Used to name the voices and to help the summary."""
+
+    __tablename__ = "meet_captions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    meeting_code: Mapped[str] = mapped_column(String(20), index=True)  # "abc-mnop-xyz"
+    client_id: Mapped[str] = mapped_column(String(40))  # the extension's id for this line
+    name: Mapped[str] = mapped_column(String(200))  # the speaker's Google Meet name
+    start: Mapped[datetime] = mapped_column(DateTime, index=True)
+    end: Mapped[datetime] = mapped_column(DateTime)
+    text: Mapped[str] = mapped_column(Text, default="")
 
 
 class EmailMeetingLink(Base):
@@ -191,6 +239,11 @@ class AppSettings(Base):
     # Names and words that come up in meetings (people, clients, projects, terms):
     # hints for Whisper and the summary, so they are heard and written correctly.
     meeting_words: Mapped[list[str] | None] = mapped_column(JSON, default=list)
+    # Remember the voices of people in my meetings, to name them next time (biometric data:
+    # off until the user turns it on, after the people agreed)
+    remember_voices: Mapped[bool | None] = mapped_column(Boolean, default=False)
+    # Last message from the Google Meet browser extension (it is installed and working)
+    extension_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
     connected_accounts: Mapped[list[str]] = mapped_column(JSON, default=list)
 
 

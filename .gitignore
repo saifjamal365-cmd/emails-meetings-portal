@@ -17,7 +17,7 @@ backend/data/*.key
 # Speech-to-text model (downloaded, ~0.5 GB) and meeting audio (private)
 backend/data/whisper/
 backend/data/recordings/
-# Voice separation models (downloaded, ~37 MB)
+# Voice separation models (downloaded, ~46 MB)
 backend/data/speakers/
 
 # Frontend

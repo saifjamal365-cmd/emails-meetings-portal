@@ -6,10 +6,15 @@
    overview, action items + owners, decisions, risks, blockers and keywords (structured JSON).
 3. The summary is saved, tasks are created from the user's own action items,
    and every step is written to the activity log (the "Integration logs").
+   The most important rule: another person's task must never get into the user's Daily Tasks
+   (echo is removed from the microphone, and the LLM's "this is mine" is double-checked).
 4. Unread emails from the last 7 days are checked for the new keywords (agents/linker.py).
+5. Voices: the other people's voices are named from the talk, from who joined the call and
+   from the voice memory (services/voice_memory.py).
 """
 
 import logging
+import re
 import threading
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -23,7 +28,7 @@ from sqlalchemy.orm import Session
 from app.agents import linker
 from app.config import get_settings
 from app.models import ActivityLog, Meeting, MeetingSummary, Task
-from app.services import google_client, meeting_client, transcriber
+from app.services import google_client, meet_helper, meeting_client, transcriber, voice_memory
 from app.services.app_settings import get_app_settings
 from app.services.llm_client import LLMError, ask_json
 from app.services.notify import notify
@@ -52,6 +57,11 @@ class SpeakerName(BaseModel):
     label: str = Field(description='The label in the transcript, e.g. "Speaker 1"')
     name: str = Field(description="The person's name, or empty if it is not clear")
     clue: str = Field(description="A few words: how you know")
+    name_quote: str = Field(
+        default="",
+        description="The exact words from THIS speaker's own line where they say their own "
+        'name ("معكم عمر"). Empty if they did not say it.',
+    )
 
 
 class MeetingOutput(BaseModel):
@@ -200,6 +210,23 @@ def _who_am_i(db: Session, meeting: Meeting) -> str:
     return f"The user is {name or 'unknown name'} <{email}>."
 
 
+def _captions_block(db: Session, meeting: Meeting) -> str:
+    """Google Meet's live captions of this call (from the extension), with the speakers' names:
+    extra help to understand who said what and to fix misheard words."""
+    end = meeting.end_time or meeting.date
+    captions = meet_helper.lines_for(
+        db, meeting.meeting_code, meeting.date - timedelta(hours=1), end + timedelta(hours=1)
+    )
+    text = meet_helper.captions_text(captions, _me_name(db))
+    if not text:
+        return ""
+    return (
+        "Google Meet live captions of this call. The speaker NAMES are reliable; the words can "
+        "be less accurate than the transcript, especially in Arabic:\n"
+        f"<captions>\n{text}\n</captions>\n\n"
+    )
+
+
 def summarize(
     db: Session, meeting: Meeting, output_language: OutputLanguage = "same"
 ) -> MeetingSummary:
@@ -212,13 +239,27 @@ def summarize(
     attendees = "\n".join(f"- {a}" for a in meeting.attendees) or "- (not known)"
     joined = ", ".join(meeting.participants or [])
     joined_line = f"Joined the call (Google Meet): {joined}\n" if joined else ""
+    known = voice_memory.known_names(db, meeting)
+    for label, found in (meeting.meet_names or {}).items():  # the user's own naming wins
+        if known.get(label, (None, None, None))[1] != "you":
+            known[label] = (found["name"], "meet", found["share"])
+    known_line = (
+        "Voices already known (Google Meet captions, voice memory or named by the user - "
+        "reliable): "
+        + ", ".join(f"{label} = {name}" for label, (name, _, _) in sorted(known.items()))
+        + "\n"
+        if known
+        else ""
+    )
     prompt = (
         f"Today is {date.today():%A %Y-%m-%d}.\n"
         f"{_who_am_i(db, meeting)}\n\n"
         f"Meeting: {meeting.title}\nDate: {meeting.date:%A %Y-%m-%d %H:%M}\n"
-        f"Organizer: {meeting.owner or '(not known)'}\nInvited:\n{attendees}\n{joined_line}\n"
+        f"Organizer: {meeting.owner or '(not known)'}\nInvited:\n{attendees}\n{joined_line}"
+        f"{known_line}\n"
         f"{_meeting_words_hint(db)}"
         f"{LANGUAGE_RULE[output_language]} Keep the keywords in both languages as explained.\n\n"
+        f"{_captions_block(db, meeting)}"
         f"<transcript>\n{meeting.transcript_text}\n</transcript>"
     )
     result = ask_json(
@@ -230,6 +271,10 @@ def summarize(
         model=get_settings().meeting_llm_model,
     )
     out = result.data
+    found_speakers = _final_speakers(out, known)
+    others = _count_others(meeting.participants, _me_name(db))
+    _check_sure(found_speakers, meeting.transcript_text, others)
+    blocked = _only_really_mine(db, meeting, out, found_speakers)
 
     summary = meeting.summary or MeetingSummary(meeting_id=meeting.id)
     summary.overview = out.overview
@@ -240,7 +285,7 @@ def summarize(
     summary.blockers = out.blockers
     summary.keywords = out.keywords
     summary.key_facts = out.key_facts
-    summary.speakers = [s.model_dump() for s in out.speakers]
+    summary.speakers = found_speakers
     summary.output_language = output_language
     summary.created_at = datetime.now()
     meeting.summary = summary
@@ -254,13 +299,122 @@ def summarize(
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
     )
+    if blocked:
+        _log(db, "not_mine_blocked", meeting, titles=blocked)
     created = _create_tasks(db, meeting, out)
     if created:
         _log(db, "tasks_created", meeting, count=len(created), titles=created)
+    learned = voice_memory.learn(db, meeting, found_speakers)
+    if learned:
+        _log(db, "voices_learned", meeting, names=learned)
     # The other way round: unread emails from the last 7 days may be about this meeting.
     linker.recheck_emails_for_meeting(db, meeting)
     db.commit()
     return summary
+
+
+def name_voice(db: Session, meeting: Meeting, label: str, name: str) -> bool:
+    """The user says who a voice is ("Speaker 2" = Omar). This meeting's summary is fixed, and
+    with Remember voices on, the voice is named by itself in the next meetings.
+    Naming a voice never makes a task the user's. Returns True when the voice is remembered."""
+    name = name.strip()
+    summary = meeting.summary
+    if summary:
+        found = [dict(s) for s in summary.speakers or []]
+        entry = next((s for s in found if s["label"] == label), None)
+        if entry is None:
+            entry = {"label": label}
+            found.append(entry)
+        old = entry.get("name") or ""
+        old_elsewhere = any(s.get("name") == old and s["label"] != label for s in found)
+        entry.update(name=name, clue="named by you", sure=True, how="you")
+        items = []
+        for item in summary.action_items or []:
+            if item["owner"] == label or (old and item["owner"] == old and not old_elsewhere):
+                item = {**item, "owner": name}
+            items.append(item)
+        summary.speakers = sorted(found, key=lambda s: _label_number(s["label"]))
+        summary.action_items = items
+    remembered = voice_memory.name_voice(db, meeting, label, name)
+    _log(db, "voice_named", meeting, label=label, name=name, remembered=remembered)
+    db.commit()
+    return remembered
+
+
+def _label_number(label: str) -> int:
+    match = re.search(r"\d+", label)
+    return int(match.group()) if match else 0
+
+
+def _final_speakers(out: MeetingOutput, known: dict[str, tuple]) -> list[dict]:
+    """The agent's names for the voices - but a voice the voice memory knows, or the user
+    named, keeps that name. The owners of the action items follow the same names."""
+    result = {s.label: s.model_dump() | {"how": "talk" if s.name else ""} for s in out.speakers}
+    for label, (name, how, score) in known.items():
+        guessed = result.get(label, {}).get("name", "")
+        if guessed and guessed.lower() != name.lower():
+            for item in out.action_items:  # the agent's other name for this voice was wrong
+                if item.owner == guessed:
+                    item.owner = name
+        clue = {
+            "you": "named by you",
+            "meet": f"Google Meet captions ({score:.0%} of this voice's talk)",
+        }.get(how, f"{score:.0%} voice match")
+        result[label] = {"label": label, "name": name, "clue": clue, "sure": True, "how": how}
+    return sorted(result.values(), key=lambda s: _label_number(s["label"]))
+
+
+def _plain(text: str) -> str:
+    """For comparing words: same Arabic spelling forms, no punctuation, single spaces."""
+    return " ".join(re.findall(r"\w+", linker.normalize(text)))
+
+
+def _check_sure(found_speakers: list[dict], transcript: str, others: int) -> None:
+    """Is the agent SURE who a voice is? (Only a sure name teaches the voice memory.)
+    Not the agent's word: the person must say their own name on THEIR OWN line - the quoted
+    words must really be there - or exactly one other person joined the call.
+    A voice named by Google Meet's captions, the voice memory or the user stays sure."""
+    said: dict[str, str] = {}
+    for line in transcript.splitlines():
+        match = re.match(r"\[[^\]]*\] (Speaker \d+|Others): (.*)", line)
+        if match:
+            said[match[1]] = f"{said.get(match[1], '')} {_plain(match[2])}"
+    for speaker in found_speakers:
+        quote = _plain(speaker.pop("name_quote", "") or "")
+        if speaker.get("how") in ("voice", "you", "meet"):
+            continue
+        own_words = bool(quote) and f" {quote} " in f"{said.get(speaker['label'], '')} "
+        speaker["sure"] = bool(speaker.get("name")) and (own_words or others == 1)
+
+
+NOT_A_PERSON = re.compile(
+    r"(speaker \d+|others|unassigned|everyone|everybody|all|the team|الكل|الجميع|)",
+    re.IGNORECASE,
+)
+
+
+def _only_really_mine(
+    db: Session, meeting: Meeting, out: MeetingOutput, found_speakers: list[dict]
+) -> list[str]:
+    """The most important rule: another person's task must never be in the user's Daily Tasks.
+    The LLM's owner_is_me is checked again; when the owner is a voice label or another known
+    person, the task is not the user's. Returns the tasks that were stopped."""
+    me = _me_name(db).lower()
+    mine = {me, me.split()[0]} if me else set()
+    others: set[str] = set()
+    names = [*(meeting.participants or []), *(s["name"] for s in found_speakers)]
+    for name in names:
+        full = (name or "").strip().lower()
+        if full and full not in mine:
+            others |= {full, full.split()[0]}
+    others -= mine  # a colleague with the user's first name: that name alone stays open
+    blocked = []
+    for item in out.action_items:
+        owner = item.owner.strip().lower()
+        if item.owner_is_me and (NOT_A_PERSON.fullmatch(owner) or owner in others):
+            item.owner_is_me = False
+            blocked.append(item.task)
+    return blocked
 
 
 def _create_tasks(db: Session, meeting: Meeting, out: MeetingOutput) -> list[str]:
@@ -349,17 +503,30 @@ def start_recording(
     title: str,
     until: datetime,
     cal: meeting_client.CalendarMeeting | None = None,
+    meeting_code: str | None = None,
 ) -> Meeting:
-    """Start recording now. `cal` = the calendar meeting, or None for "Record now"."""
+    """Start recording now. `cal` = the calendar meeting, or None for "Record now".
+    `meeting_code` = the Google Meet code of a call that is not in the calendar.
+    Joining a calendar meeting again after its recording was finished starts "part 2", so the
+    first part is kept."""
     if recorder.running:
         raise ValueError("A recording is already running.")
-    provider_id = cal.provider_meeting_id if cal else f"rec-{datetime.now():%Y%m%d%H%M%S%f}"
+    base = cal.provider_meeting_id if cal else f"rec-{datetime.now():%Y%m%d%H%M%S%f}"
+    provider_id, part = base, 1
     meeting = db.scalar(select(Meeting).where(Meeting.provider_meeting_id == provider_id))
+    while meeting is not None and meeting.platform == "recorded":
+        if meeting.transcript_status == "recording":
+            break  # left over from a restart: record into it again
+        part += 1
+        provider_id = f"{base}#{part}"
+        meeting = db.scalar(select(Meeting).where(Meeting.provider_meeting_id == provider_id))
     if meeting is None:
         meeting = Meeting(provider_meeting_id=provider_id, attendees=[])
         db.add(meeting)
     meeting.platform = "recorded"
     meeting.title = cal.title if cal else (title.strip() or "Recorded meeting")
+    if part > 1:
+        meeting.title += f" (part {part})"
     meeting.date = cal.start if cal else datetime.now()
     meeting.end_time = until
     if cal:
@@ -368,6 +535,8 @@ def start_recording(
             cal.attendees,
             cal.meeting_code,
         )
+    elif meeting_code:
+        meeting.meeting_code = meeting_code
     meeting.transcript_status = "recording"
     db.flush()
 
@@ -397,6 +566,31 @@ def stop_recording(background: bool = True) -> RecordingState | None:
     return state
 
 
+def _name_voices_from_meet(
+    db: Session, meeting: Meeting, state: RecordingState, times: dict[str, list]
+) -> None:
+    """Google Meet's captions (from the extension) say who spoke when: the voice that talks at
+    the same times gets that name. Kept in meeting.meet_names for the summary."""
+    if not meeting.meeting_code or not times or not state.started_at:
+        return
+    end = state.started_at + timedelta(seconds=state.seconds) if state.seconds else datetime.now()
+    captions = meet_helper.lines_for(db, meeting.meeting_code, state.started_at, end)
+    found = meet_helper.name_voices(times, state.started_at, captions, _me_name(db))
+    meeting.meet_names = found
+    if found:
+        names = {label: v["name"] for label, v in found.items()}
+        _log(db, "voices_named_by_meet", meeting, voices=names)
+
+
+def _count_others(participants: list[str] | None, me_name: str) -> int:
+    """How many OTHER people joined the call (0 = not known)."""
+    people = participants or []
+    others = [p for p in people if p.strip().lower() != me_name.strip().lower()]
+    if people and len(others) == len(people):  # the user's name is written differently there
+        return len(people) - 1
+    return len(others)
+
+
 def _joined_the_call(db: Session, meeting: Meeting) -> list[str]:
     """Who joined the Google Meet call. It helps the agent name "Speaker 1", "Speaker 2" ...
     Zoom / Teams / "Record now" have no meeting code: nobody is listed."""
@@ -421,15 +615,20 @@ def process_recording(state: RecordingState) -> None:
             return
         link = f"/meetings?open={meeting.id}"
         meeting.transcript_status = "transcribing"
+        # Who joined the call: names for the voices, and never more voices than people.
+        meeting.participants = _joined_the_call(db, meeting)
         db.commit()
+        others = _count_others(meeting.participants, _me_name(db))
         try:
-            text = transcriber.transcribe_meeting(
+            transcript = transcriber.transcribe_meeting(
                 state.me_file,
                 state.others_file,
                 state.started_at,
                 _me_name(db),
                 get_app_settings(db).meeting_words or [],
+                max_voices=others or None,
             )
+            text = transcript.text
         except Exception as e:
             log.exception("Transcription failed")
             meeting.transcript_status = "none"
@@ -444,11 +643,22 @@ def process_recording(state: RecordingState) -> None:
             db.commit()
         else:
             meeting.transcript_text = text
-            meeting.participants = _joined_the_call(db, meeting)
             meeting.transcript_status = "ready"
             _log(db, "transcript_recorded", meeting, lines=text.count("\n") + 1,
                  minutes=round(state.seconds / 60))  # fmt: skip
+            if transcript.echo_removed:
+                _log(db, "echo_removed", meeting, lines=transcript.echo_removed)
+            _name_voices_from_meet(db, meeting, state, transcript.times)
             db.commit()
+            try:
+                recognized = voice_memory.save_meeting_voices(db, meeting, transcript.voices)
+                if recognized:
+                    names = {label: name for label, (name, _) in recognized.items()}
+                    _log(db, "voices_recognized", meeting, voices=names)
+                db.commit()
+            except Exception:  # the summary works without the voice memory
+                log.exception("Voice memory failed")
+                db.rollback()
             try:
                 summary = summarize(db, meeting)
                 items = len(summary.action_items or [])
@@ -467,6 +677,52 @@ def process_recording(state: RecordingState) -> None:
                     path.unlink(missing_ok=True)
 
 
+# ---- 5. Google Meet helper (browser extension): record from joining to leaving ----------------
+
+IN_CALL_FRESH = timedelta(minutes=3)  # the extension says "still in the call" every minute
+_left_at: dict[str, datetime] = {}  # Meet code -> when the user left that call
+_in_call_at: dict[str, datetime] = {}  # Meet code -> last "I am in this call"
+
+
+def _recording_code(db: Session, s: RecordingState) -> str | None:
+    meeting = db.get(Meeting, s.meeting_id) if s.meeting_id else None
+    return meeting.meeting_code if meeting else None
+
+
+def _calendar_meeting_for(db: Session, code: str) -> meeting_client.CalendarMeeting | None:
+    """The calendar meeting with this Google Meet code: now, or starting within 30 minutes."""
+    try:
+        current = meeting_client.list_current_meetings(db, early_seconds=30 * 60)
+    except Exception:
+        log.exception("Could not read the calendar")
+        return None
+    return next((cal for cal in current if cal.meeting_code == code), None)
+
+
+def meet_call(db: Session, code: str, state: str) -> str:
+    """The extension says: the user "joined" or "left" a Google Meet call, or is "in_call".
+    Joining starts the recording (early or late, in the calendar or not); leaving stops it
+    (after a short grace time, in case of a page reload)."""
+    now = datetime.now()
+    if state == "left":
+        _left_at[code] = now
+        return "left"
+    _left_at.pop(code, None)
+    _in_call_at[code] = now
+    if state != "joined":
+        return "recording" if recorder.running else "not recording"
+    if recorder.running:
+        return "recording"
+    if not get_app_settings(db).auto_record:
+        return "off"
+    cal = _calendar_meeting_for(db, code) if google_client.account(db) else None
+    until = cal.end if cal and cal.end > now else now + timedelta(hours=2)
+    meeting = start_recording(db, f"Google Meet {code}", until, cal, meeting_code=code)
+    _log(db, "joined_call", meeting, meeting_code=code)
+    db.commit()
+    return "started"
+
+
 def _silent_too_long(s: RecordingState, now: datetime) -> bool:
     """Nobody talked for silence_stop_minutes (twice as long if nobody has talked at all)."""
     minutes = get_settings().silence_stop_minutes
@@ -482,8 +738,28 @@ def recorder_tick(db: Session) -> str:
     """Every few seconds: stop a finished recording, or start one for a meeting starting now."""
     settings = get_settings()
     now = datetime.now()
+    state = recorder.state
+    if not recorder.running and state.meeting_id and not state.finished:
+        # The recording ended by itself (a device failed): finish it like a normal stop, so the
+        # meeting is not stuck on "recording" and the error is shown.
+        threading.Thread(target=process_recording, args=(recorder.stop(),), daemon=True).start()
+        return "stopped (failed)"
     if recorder.running:
         s = recorder.state
+        code = _recording_code(db, s)
+        left = _left_at.get(code) if code else None
+        if left and now - left >= timedelta(seconds=settings.leave_grace_seconds):
+            _left_at.pop(code, None)
+            _in_call_at.pop(code, None)
+            _log(db, "left_call", db.get(Meeting, s.meeting_id))
+            db.commit()
+            stop_recording()
+            return "stopped (left the call)"
+        seen = _in_call_at.get(code) if code else None
+        if seen and not left and now - seen < IN_CALL_FRESH:
+            # The extension says you are still in the call: the calendar end and silence do not
+            # stop the recording - leaving the call does.
+            return "recording"
         if s.until and now >= s.until:
             talking = s.last_voice_at and now - s.last_voice_at < timedelta(minutes=1)
             if talking and s.extra_minutes < settings.record_max_extra_minutes:
@@ -498,6 +774,8 @@ def recorder_tick(db: Session) -> str:
 
     if not get_app_settings(db).auto_record or google_client.account(db) is None:
         return "off"
+    helper = meet_helper.active(db)
+    wait = timedelta(minutes=settings.meet_join_wait_minutes)
     for cal in meeting_client.list_current_meetings(db, settings.record_start_early_seconds):
         done = db.scalar(
             select(Meeting).where(
@@ -505,9 +783,12 @@ def recorder_tick(db: Session) -> str:
                 Meeting.platform == "recorded",
             )
         )
-        if done is None:  # not recorded yet (also not after a stop in the middle)
-            start_recording(db, cal.title, cal.end, cal)
-            return "started"
+        if done is not None:  # recorded already (also after a stop in the middle)
+            continue
+        if helper and cal.meeting_code and now < cal.start + wait:
+            continue  # the extension starts the recording when you join the call
+        start_recording(db, cal.title, cal.end, cal)
+        return "started"
     return "idle"
 
 

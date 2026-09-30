@@ -3,14 +3,14 @@
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.agents import meeting_agent
 from app.agents.meeting_agent import OutputLanguage
 from app.db import DbSession
 from app.models import ActivityLog, EmailMeetingLink, Meeting, MeetingSummary, Task
-from app.services import google_client
+from app.services import google_client, voice_memory
 from app.services.llm_client import LLMError
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])
@@ -67,6 +67,7 @@ class LinkedEmailOut(BaseModel):
 class MeetingDetail(MeetingItem):
     transcript_text: str | None
     participants: list[str]  # who joined the Google Meet call
+    voice_labels: list[str]  # voices with a saved voice print (can be remembered when named)
     summary: SummaryOut | None
     logs: list[LogOut]  # "Integration logs"
     tasks: list[TaskOut]
@@ -129,6 +130,7 @@ def _detail(db: DbSession, m: Meeting) -> MeetingDetail:
         **_item(m).model_dump(),
         transcript_text=m.transcript_text,
         participants=m.participants or [],
+        voice_labels=voice_memory.labels_with_prints(db, m),
         summary=SummaryOut(
             overview=s.overview,
             detected_language=s.detected_language,
@@ -262,6 +264,21 @@ def stop_recording() -> RecorderStatus:
 @router.get("/{meeting_id}", response_model=MeetingDetail)
 def get_meeting(meeting_id: int, db: DbSession) -> MeetingDetail:
     return _detail(db, _get(db, meeting_id))
+
+
+class NameVoiceBody(BaseModel):
+    label: str = Field(pattern=r"^(Speaker \d{1,3}|Others)$")
+    name: str = Field(min_length=1, max_length=200)
+
+
+@router.post("/{meeting_id}/voices", response_model=MeetingDetail)
+def name_voice(meeting_id: int, body: NameVoiceBody, db: DbSession) -> MeetingDetail:
+    """Say who a voice is ("Speaker 2" = Omar). With Remember voices on, it is remembered."""
+    meeting = _get(db, meeting_id)
+    if not body.name.strip():
+        raise HTTPException(400, "Write a name.")
+    meeting_agent.name_voice(db, meeting, body.label, body.name)
+    return _detail(db, meeting)
 
 
 class SummarizeBody(BaseModel):

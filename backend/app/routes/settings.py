@@ -15,6 +15,7 @@ class SettingsBody(BaseModel):
     auto_summarize: bool = False
     auto_record: bool = False
     meeting_words: list[str] = []
+    remember_voices: bool = False
 
 
 def _clean(domains: list[str]) -> list[str]:
@@ -34,6 +35,7 @@ def _out(s) -> SettingsBody:
         auto_summarize=s.auto_summarize,
         auto_record=bool(s.auto_record),
         meeting_words=s.meeting_words or [],
+        remember_voices=bool(s.remember_voices),
     )
 
 
@@ -49,6 +51,7 @@ def update(body: SettingsBody, db: DbSession) -> SettingsBody:
     s.low_domains = _clean(body.low_domains)
     s.auto_summarize = body.auto_summarize
     s.auto_record = body.auto_record
+    s.remember_voices = body.remember_voices
     words = [w.strip() for w in body.meeting_words]  # trim first, then remove repeats
     s.meeting_words = [w for w in dict.fromkeys(words) if w][:100]
     db.commit()

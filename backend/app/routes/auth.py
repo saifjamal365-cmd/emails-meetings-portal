@@ -23,6 +23,10 @@ PUBLIC_PATHS = {
     "/api/auth/login",
     "/api/auth/logout",
     "/api/auth/google/callback",
+    # The Google Meet browser extension: checked with its own key (routes/extension.py)
+    "/api/extension/hello",
+    "/api/extension/call",
+    "/api/extension/captions",
 }
 
 MAX_FAILS = 5  # wrong passwords allowed ...

@@ -4,17 +4,22 @@ The model (WHISPER_MODEL, default "large-v3-turbo") is downloaded once into data
 Each audio track is transcribed on its own, then the lines are put in time order with the
 speaker's name: "[10:02] Saif: I will send the price list by Thursday."
 On the other people's track the voices are separated (services/speakers.py): "Speaker 1",
-"Speaker 2" ... - or "Others" when that is off or fails.
+"Speaker 2" ... - or "Others" when that is off or fails. Echo of the others' voices on your
+microphone is removed, so their words (and tasks) never get your name.
 """
 
+import bisect
 import logging
+import re
 import threading
 import wave
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 
+from app.agents.linker import normalize
 from app.config import get_settings
 from app.services import speakers
 
@@ -90,37 +95,113 @@ def _whisper(audio: np.ndarray, words: list[str] | None, word_timestamps: bool =
     return [seg for seg in segments if seg.text.strip()]
 
 
-def transcribe_file(path: Path, words: list[str] | None = None) -> list[Segment]:
-    """Text with start times (your microphone track)."""
+def transcribe_mine(path: Path, words: list[str] | None = None) -> list[speakers.Word]:
+    """Your microphone track: (start, end, text) pieces."""
     if not _has_audio(path):
         return []
-    return [(seg.start, seg.text.strip()) for seg in _whisper(load_audio(path), words)]
+    return [(seg.start, seg.end, seg.text.strip()) for seg in _whisper(load_audio(path), words)]
 
 
-def transcribe_others(path: Path, words: list[str] | None = None) -> list[Line]:
+@dataclass
+class OthersTrack:
+    lines: list[Line] = field(default_factory=list)  # (start, "Speaker 1", text)
+    heard: list[speakers.Word] = field(default_factory=list)  # every word with its time
+    voices: dict[str, list[float]] = field(default_factory=dict)  # "Speaker 1" -> voice print
+    # When each voice talked, in seconds from the start (to match Google Meet's captions)
+    times: dict[str, list[tuple[float, float]]] = field(default_factory=dict)
+
+
+def transcribe_others(
+    path: Path, words: list[str] | None = None, max_voices: int | None = None
+) -> OthersTrack:
     """The other people's track, one label per voice: "Speaker 1", "Speaker 2" ...
-    With speaker separation off, or when it fails, every line is "Others"."""
+    With speaker separation off, or when it fails, every line is "Others".
+    `max_voices` = how many other people joined the call, when known."""
     if not _has_audio(path):
-        return []
+        return OthersTrack()
     audio = load_audio(path)
     separate = get_settings().speaker_separation
     segments = _whisper(audio, words, word_timestamps=separate)
-    as_others = [(seg.start, "Others", seg.text.strip()) for seg in segments]
-    if not separate or not segments:
-        return as_others
-    try:
-        turns = speakers.diarize(audio)
-    except Exception:
-        log.exception("Speaker separation failed - the other people stay 'Others'")
-        return as_others
-    if not turns:
-        return as_others
-    word_lists = [
+    pieces = [
         [(w.start, w.end, w.word) for w in seg.words] if seg.words
         else [(seg.start, seg.end, seg.text)]  # no word times: the sentence as one piece
         for seg in segments
     ]  # fmt: skip
-    return speakers.label_segments(word_lists, turns)
+    track = OthersTrack(
+        lines=[(seg.start, "Others", seg.text.strip()) for seg in segments],
+        heard=[word for piece in pieces for word in piece],
+    )
+    if not separate or not segments:
+        return track
+    try:
+        turns = speakers.diarize(audio)
+    except Exception:
+        log.exception("Speaker separation failed - the other people stay 'Others'")
+        return track
+    if not turns:
+        return track
+    try:
+        turns = speakers.merge_voices(
+            audio, turns, max_voices, get_settings().voice_merge_threshold
+        )
+    except Exception:
+        log.exception("Merging the voices failed - keeping the separation as it is")
+    track.lines = speakers.label_segments(pieces, turns)
+    for start, end, n in turns:
+        track.times.setdefault(speakers.label(n), []).append((start, end))
+    try:
+        prints = speakers.voice_prints(audio, turns)
+        track.voices = {speakers.label(n): v.round(5).tolist() for n, v in prints.items()}
+    except Exception:
+        log.exception("Voice prints failed - the voices are not recognized this time")
+    return track
+
+
+# ---- echo: the others' voices on your microphone -----------------------------------------
+
+ECHO_WINDOW = 1.0  # seconds around your line
+ECHO_SHARE = 0.7  # this share of your line's words heard from the others at that time = echo
+ECHO_MIN_WORDS = 3  # shorter lines ("OK", "تمام") are kept
+
+
+def _word_set(text: str) -> set[str]:
+    return {w for w in re.findall(r"\w+", normalize(text)) if len(w) > 1}
+
+
+def remove_echo(mine: list[speakers.Word], heard: list[speakers.Word]) -> tuple[list[Segment], int]:
+    """Without headphones the other people's voices also reach your microphone. Their words
+    would get YOUR name, and their tasks would look like yours. A line on your microphone
+    whose words were heard from the others at the same time is that echo: it is dropped.
+    (Your answer a few seconds later, even with the same words, is kept.)"""
+    heard = sorted(heard)
+    starts = [start for start, _, _ in heard]
+    heard_words = [_word_set(text) for _, _, text in heard]
+    kept, dropped = [], 0
+    for start, end, text in mine:
+        words = _word_set(text)
+        if len(words) >= ECHO_MIN_WORDS:
+            nearby: set[str] = set()
+            first = bisect.bisect_left(starts, start - ECHO_WINDOW - 30)  # a piece is < 30 s
+            last = bisect.bisect_right(starts, end + ECHO_WINDOW)
+            for i in range(first, last):
+                if heard[i][1] > start - ECHO_WINDOW:
+                    nearby |= heard_words[i]
+            if len(words & nearby) >= ECHO_SHARE * len(words):
+                dropped += 1
+                continue
+        kept.append((start, text))
+    return kept, dropped
+
+
+# ---- both tracks ---------------------------------------------------------------------------
+
+
+@dataclass
+class Transcript:
+    text: str
+    voices: dict[str, list[float]] = field(default_factory=dict)  # "Speaker 1" -> voice print
+    echo_removed: int = 0  # lines on your microphone that were really the others' voices
+    times: dict[str, list[tuple[float, float]]] = field(default_factory=dict)  # voice -> talk
 
 
 def merge(me: list[Segment], others: list[Line], started_at: datetime, me_name: str) -> str:
@@ -138,7 +219,11 @@ def transcribe_meeting(
     started_at: datetime,
     me_name: str,
     words: list[str] | None = None,
-) -> str:
-    return merge(
-        transcribe_file(me_file, words), transcribe_others(others_file, words), started_at, me_name
-    )
+    max_voices: int | None = None,
+) -> Transcript:
+    others = transcribe_others(others_file, words, max_voices)
+    mine, echo = remove_echo(transcribe_mine(me_file, words), others.heard)
+    if echo:
+        log.info("Dropped %s echo line(s) from the microphone", echo)
+    text = merge(mine, others.lines, started_at, me_name)
+    return Transcript(text, others.voices, echo, others.times)

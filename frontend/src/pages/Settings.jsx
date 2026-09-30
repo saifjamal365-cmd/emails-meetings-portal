@@ -14,6 +14,9 @@ export default function Settings({ loginRequired }) {
   const [autoSummarize, setAutoSummarize] = useState(false)
   const [autoRecord, setAutoRecord] = useState(false)
   const [meetingWords, setMeetingWords] = useState('')
+  const [rememberVoices, setRememberVoices] = useState(false)
+  const [voices, setVoices] = useState([])
+  const [meetHelper, setMeetHelper] = useState(null)
   const [confirmText, setConfirmText] = useState('')
   const [confirmDialog, confirm] = useConfirm()
   // Message after coming back from the Google login page.
@@ -33,30 +36,72 @@ export default function Settings({ loginRequired }) {
     api('/auth/google/status').then(setGoogle).catch(() => setGoogle(null))
   }
 
+  function loadVoices() {
+    api('/voices').then(setVoices).catch(() => setVoices([]))
+  }
+
+  // The Meet helper connects by itself a moment after a portal page loads: check again
+  // every few seconds until it is connected.
+  useEffect(() => {
+    const check = () => api('/extension/status').then(setMeetHelper).catch(() => setMeetHelper(null))
+    check()
+    const timer = setInterval(check, 5000)
+    return () => clearInterval(timer)
+  }, [])
+  const meetHelperActive = meetHelper?.active
+
   useEffect(() => {
     loadGoogle()
+    loadVoices()
     api('/settings').then((s) => {
       setHigh(toText(s.high_domains))
       setLow(toText(s.low_domains))
       setAutoSummarize(s.auto_summarize)
       setAutoRecord(s.auto_record)
       setMeetingWords(toText(s.meeting_words))
+      setRememberVoices(s.remember_voices)
     })
   }, [])
 
   async function save(changes = {}, successText = 'Settings saved.') {
     try {
-      const body = { high_domains: toList(high), low_domains: toList(low), auto_summarize: autoSummarize, auto_record: autoRecord, meeting_words: toList(meetingWords), ...changes }
+      const body = {
+        high_domains: toList(high),
+        low_domains: toList(low),
+        auto_summarize: autoSummarize,
+        auto_record: autoRecord,
+        meeting_words: toList(meetingWords),
+        remember_voices: rememberVoices,
+        ...changes,
+      }
       const s = await api('/settings', { method: 'PUT', body })
       setHigh(toText(s.high_domains))
       setLow(toText(s.low_domains))
       setAutoSummarize(s.auto_summarize)
       setAutoRecord(s.auto_record)
       setMeetingWords(toText(s.meeting_words))
+      setRememberVoices(s.remember_voices)
       setMessage({ text: successText, error: false })
     } catch (e) {
       setMessage({ text: e.message, error: true })
     }
+  }
+
+  async function forgetVoice(voice) {
+    if (!(await confirm(`Forget the voice of ${voice.name}?`, { confirmLabel: 'Forget', danger: true }))) return
+    await api(`/voices/${voice.id}`, { method: 'DELETE' })
+    loadVoices()
+  }
+
+  async function forgetAllVoices() {
+    const ok = await confirm('Delete every remembered voice and every saved voice print?', {
+      confirmLabel: 'Delete all voices',
+      danger: true,
+    })
+    if (!ok) return
+    await api('/voices', { method: 'DELETE' })
+    loadVoices()
+    setMessage({ text: 'All voice prints were deleted.', error: false })
   }
 
   async function deleteData() {
@@ -196,6 +241,91 @@ export default function Settings({ loginRequired }) {
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <h3 className="mb-1 font-medium">Google Meet helper (browser extension)</h3>
+        <p className="mb-2 text-sm text-slate-600">
+          In Google Meet calls it records from the moment you join until you leave, turns on the captions by itself,
+          and gives every voice its Google Meet name. It talks only to this portal, on this computer.
+        </p>
+        {meetHelperActive ? (
+          <p className="rounded-md bg-emerald-50 p-2 text-sm text-emerald-800">
+            Connected. Last message: {new Date(meetHelper.last_seen).toLocaleString()}.
+          </p>
+        ) : (
+          <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="mb-1 font-medium">Not connected yet. Install it once (Chrome or Edge):</p>
+            <ol className="list-decimal space-y-0.5 ps-5">
+              <li>
+                Open <code>chrome://extensions</code> (or <code>edge://extensions</code>) and turn on{' '}
+                <b>Developer mode</b>.
+              </li>
+              <li>
+                Click <b>Load unpacked</b> and choose the folder <code>week8\email-meeting-portal\extension</code>.
+              </li>
+              <li>
+                In that same browser, <b>reload this portal page (F5)</b> and log in: it connects by itself in a few
+                seconds, nothing to type.
+              </li>
+            </ol>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <h3 className="mb-1 font-medium">Voice memory</h3>
+        <label className="mb-3 flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={rememberVoices}
+            onChange={(e) =>
+              save({ remember_voices: e.target.checked }, e.target.checked ? 'Voice memory is on.' : 'Voice memory is off.')
+            }
+          />
+          <span>
+            <span className="font-medium">Remember the voices of people in my meetings</span>
+            <span className="block text-slate-600">
+              The portal learns a voice when a person says their own name, or when you name a voice once on a meeting
+              page. In the next meetings it knows them by their voice, even if nobody says their name. Voice prints stay
+              on this computer, encrypted.
+            </span>
+            <span className="mt-1 block rounded-md bg-amber-50 p-2 text-amber-900">
+              A voice print is biometric personal data. Turn this on only after the people in your meetings agreed.
+            </span>
+          </span>
+        </label>
+        {voices.length === 0 ? (
+          <p className="text-sm text-slate-500">No voices remembered yet.</p>
+        ) : (
+          <>
+            <ul className="mb-2 divide-y divide-slate-100 text-sm">
+              {voices.map((v) => (
+                <li key={v.id} className="flex items-center gap-3 py-1.5">
+                  <span dir="auto" className="font-medium">{v.name}</span>
+                  <span className="text-slate-500">
+                    learned from {v.meetings} meeting{v.meetings === 1 ? '' : 's'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => forgetVoice(v)}
+                    className="ms-auto rounded-md border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50"
+                  >
+                    Forget
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={forgetAllVoices}
+              className="rounded-md border border-red-200 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
+            >
+              Delete all voices
+            </button>
+          </>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-4">
         <h3 className="mb-1 font-medium">Sender rules</h3>
         <p className="mb-3 text-sm text-slate-600">
           One domain per line. Rules are checked before the LLM. Leave High empty to let the agent decide
@@ -246,8 +376,8 @@ export default function Settings({ loginRequired }) {
       <section className="rounded-lg border border-red-200 bg-white p-4">
         <h3 className="mb-1 font-medium text-red-800">Delete my data</h3>
         <p className="mb-3 text-sm text-slate-600">
-          Deletes the portal's copies of your emails, meetings, transcripts, summaries, tasks, plans, notifications
-          and logs. Your emails stay in Gmail. Settings and the Google connection are kept.
+          Deletes the portal's copies of your emails, meetings, transcripts, summaries, tasks, plans, notifications,
+          logs and remembered voices. Your emails stay in Gmail. Settings and the Google connection are kept.
         </p>
         <div className="flex items-center gap-2">
           <input

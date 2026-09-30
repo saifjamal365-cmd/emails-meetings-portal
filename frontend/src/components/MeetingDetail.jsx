@@ -12,8 +12,18 @@ const LOG_TEXT = {
   transcript_downloaded: (d) => `Transcript downloaded from Google Meet (${d.lines} lines)`,
   transcript_uploaded: (d) => `Transcript uploaded (${d.lines} lines)`,
   recording_started: () => 'Recording started on this computer',
+  joined_call: () => 'You joined the Google Meet call (Meet helper) - recording started',
+  left_call: () => 'You left the Google Meet call (Meet helper) - recording stopped',
+  voices_named_by_meet: (d) =>
+    `Named from Google Meet's captions: ${Object.entries(d.voices).map(([label, name]) => `${label} = ${name}`).join(', ')}`,
   recording_recovered: () => 'Recording finished after a restart',
   transcript_recorded: (d) => `Transcript written by the recorder (${d.lines} lines, ${d.minutes} min)`,
+  echo_removed: (d) => `${d.lines} line${d.lines === 1 ? '' : 's'} on your microphone were the others' voices (echo) and were removed`,
+  voices_recognized: (d) =>
+    `Voice memory recognized: ${Object.entries(d.voices).map(([label, name]) => `${label} = ${name}`).join(', ')}`,
+  voices_learned: (d) => `Voice memory learned: ${d.names.join(', ')}`,
+  voice_named: (d) => `You named ${d.label}: ${d.name}${d.remembered ? ' (remembered)' : ''}`,
+  not_mine_blocked: (d) => `Not added to your tasks (another person's task): ${d.titles.join('; ')}`,
   summarized: (d) => `Summarized by ${d.model} (${d.input_tokens} in / ${d.output_tokens} out tokens)`,
   tasks_created: (d) => `${d.count} task${d.count === 1 ? '' : 's'} created: ${d.titles.join('; ')}`,
   emails_linked: (d) => `${d.email_ids.length} unread email${d.email_ids.length === 1 ? '' : 's'} linked to this meeting`,
@@ -25,6 +35,71 @@ function Section({ title, children }) {
       <h4 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h4>
       {children}
     </section>
+  )
+}
+
+const HOW = {
+  meet: { text: 'Google Meet', className: 'bg-teal-50 text-teal-700 ring-teal-200' },
+  voice: { text: 'voice memory', className: 'bg-violet-50 text-violet-700 ring-violet-200' },
+  talk: { text: 'from the talk', className: 'bg-sky-50 text-sky-700 ring-sky-200' },
+  you: { text: 'named by you', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+}
+
+// One voice in "Who spoke": its name, how it was found, and "Name" to set it once.
+function VoiceRow({ voice, suggestions, canRemember, onSave }) {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(voice.name || '')
+  const how = HOW[voice.how]
+  const listId = `names-${voice.label.replace(/\s/g, '')}`
+
+  async function submit(e) {
+    e.preventDefault()
+    if (!name.trim()) return
+    await onSave(name.trim())
+    setEditing(false)
+  }
+
+  return (
+    <li dir="auto">
+      <span className="font-medium">{voice.label}</span> → {voice.name || <span className="text-slate-500">not known</span>}{' '}
+      {how && voice.name && <Badge className={how.className}>{how.text}</Badge>}
+      {voice.clue && voice.how !== 'you' && <span className="text-slate-500"> · {voice.clue}</span>}
+      {!editing && (
+        <button type="button" onClick={() => setEditing(true)} className="ms-2 text-xs text-blue-700 underline">
+          {voice.name ? 'Change' : 'Name'}
+        </button>
+      )}
+      {editing && (
+        <form onSubmit={submit} className="mt-1 flex flex-wrap items-center gap-2">
+          <input
+            dir="auto"
+            autoFocus
+            list={listId}
+            value={name}
+            maxLength={200}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Who is this?"
+            className="w-48 rounded-md border border-slate-300 px-2 py-1 text-sm"
+          />
+          <datalist id={listId}>
+            {suggestions.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
+          <button type="submit" className="rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
+            Save
+          </button>
+          <button type="button" onClick={() => setEditing(false)} className="text-sm text-slate-600 underline">
+            Cancel
+          </button>
+          <span className="w-full text-xs text-slate-500">
+            {canRemember
+              ? 'The voice memory keeps this voice, so it is named by itself next time.'
+              : 'Only for this meeting (the voice memory was off when it was recorded).'}
+          </span>
+        </form>
+      )}
+    </li>
   )
 }
 
@@ -77,6 +152,22 @@ export default function MeetingDetail({ meetingId, onChanged }) {
 
   const s = meeting.summary
   const ready = meeting.transcript_status === 'ready'
+  // Every separated voice: the agent's list, plus voices with a print that it did not list.
+  const listed = s?.speakers ?? []
+  const voices = [
+    ...listed,
+    ...meeting.voice_labels.filter((l) => !listed.some((sp) => sp.label === l)).map((label) => ({ label, name: '' })),
+  ]
+  const suggestions = [...new Set([...meeting.participants, ...listed.map((sp) => sp.name).filter(Boolean)])]
+
+  async function nameVoice(label, name) {
+    setError('')
+    try {
+      setMeeting(await api(`/meetings/${meetingId}/voices`, { method: 'POST', body: { label, name } }))
+    } catch (e) {
+      setError(e.message)
+    }
+  }
 
   return (
     <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-6">
@@ -152,18 +243,21 @@ export default function MeetingDetail({ meetingId, onChanged }) {
             </Section>
           )}
 
-          {s.speakers?.length > 0 && (
+          {voices.length > 0 && (
             <Section title="Who spoke">
               <p className="mb-1 text-xs text-slate-500">
-                The other people&apos;s voices were separated on this computer. Names come from what was said and
-                from who joined the call. One person can have two labels.
+                The other people&apos;s voices were separated on this computer. Names come from Google Meet&apos;s
+                captions, the voice memory, what was said, and who joined the call.
               </p>
-              <ul className="space-y-1 text-sm" dir="auto">
-                {s.speakers.map((sp) => (
-                  <li key={sp.label}>
-                    <span className="font-medium">{sp.label}</span> → {sp.name || <span className="text-slate-500">not known</span>}
-                    {sp.clue && <span className="text-slate-500"> · {sp.clue}</span>}
-                  </li>
+              <ul className="space-y-1 text-sm">
+                {voices.map((sp) => (
+                  <VoiceRow
+                    key={sp.label}
+                    voice={sp}
+                    suggestions={suggestions}
+                    canRemember={meeting.voice_labels.includes(sp.label)}
+                    onSave={(name) => nameVoice(sp.label, name)}
+                  />
                 ))}
               </ul>
             </Section>
