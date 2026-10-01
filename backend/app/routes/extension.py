@@ -94,6 +94,8 @@ class CaptionLine(BaseModel):
     start: int = Field(gt=0)  # ms since 1970, the browser's clock (= this computer's clock)
     end: int = Field(gt=0)
     text: str = Field(default="", max_length=5000)
+    # when the words really grew: [start_ms, end_ms] pairs
+    spans: list[tuple[int, int]] = Field(default_factory=list, max_length=500)
 
 
 class CaptionsBody(BaseModel):

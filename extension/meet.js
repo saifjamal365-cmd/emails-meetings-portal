@@ -60,7 +60,12 @@
   // The captions region shows one block per speaker turn: the speaker's picture and name, then
   // the words, which grow while the person talks. One block = one caption line for the portal.
 
-  const lines = new Map() // block element -> {id, name, start, end, text, sent}
+  // block element -> {id, name, start, end, text, spans, sent}. `spans` = when the words really
+  // grew ([start, end] pairs): Meet can keep ONE box open for a speaker for many minutes while
+  // others talk, so "start to end" alone would say she talked the whole time.
+  const lines = new Map()
+  const SPAN_GAP = 2000 // ms without new words = a new speaking moment
+  const MAX_SPANS = 500
 
   function blocksIn(region) {
     const blocks = new Set()
@@ -99,9 +104,13 @@
       if (!found) continue
       const line = lines.get(block)
       if (!line) {
-        lines.set(block, { id: newId(), name: found.name, start: now, end: now, text: found.text, sent: false })
+        const spans = [[now, now]]
+        lines.set(block, { id: newId(), name: found.name, start: now, end: now, text: found.text, spans, sent: false })
         linesRead += 1
       } else if (line.text !== found.text) {
+        const last = line.spans[line.spans.length - 1]
+        if (now - last[1] <= SPAN_GAP) last[1] = now
+        else if (line.spans.length < MAX_SPANS) line.spans.push([now, now])
         Object.assign(line, { text: found.text, end: now, sent: false })
       }
     }
@@ -127,7 +136,14 @@
       send({
         type: 'captions',
         code,
-        lines: ready.map(({ id, name, start, end, text }) => ({ id, name, start, end, text: text.slice(0, 5000) })),
+        lines: ready.map(({ id, name, start, end, text, spans }) => ({
+          id,
+          name,
+          start,
+          end,
+          text: text.slice(0, 5000),
+          spans: spans.map((span) => [...span]),
+        })),
       })
       ready.forEach((line) => (line.sent = true))
     }

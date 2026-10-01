@@ -161,6 +161,9 @@ class MeetCaption(Base):
     start: Mapped[datetime] = mapped_column(DateTime, index=True)
     end: Mapped[datetime] = mapped_column(DateTime)
     text: Mapped[str] = mapped_column(Text, default="")
+    # When the words really grew: [[start_ms, end_ms], ...] (Meet can keep one caption box
+    # open for minutes while others talk)
+    spans: Mapped[list | None] = mapped_column(JSON, default=list)
 
 
 class EmailMeetingLink(Base):

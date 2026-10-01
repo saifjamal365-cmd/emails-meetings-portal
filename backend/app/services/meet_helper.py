@@ -73,7 +73,19 @@ def save_lines(db: Session, code: str, lines: list[dict]) -> int:
         row.name = line["name"].strip()
         row.start, row.end = _time(line["start"]), _time(max(line["end"], line["start"]))
         row.text = line.get("text", "").strip()
+        row.spans = [[int(s), int(max(e, s))] for s, e in line.get("spans") or []]
     return len(lines)
+
+
+def _talk_times(caption: MeetCaption, started_at: datetime) -> list[tuple[float, float]]:
+    """When this caption's speaker really talked, in seconds from the recording start. A caption
+    box can stay open for minutes while others talk: its "spans" say when the words grew."""
+    base = started_at.timestamp()
+    if caption.spans:
+        return [(s / 1000 - base, e / 1000 - base) for s, e in caption.spans]
+    return [
+        ((caption.start - started_at).total_seconds(), (caption.end - started_at).total_seconds())
+    ]
 
 
 def lines_for(db: Session, code: str | None, start: datetime, end: datetime) -> list[MeetCaption]:
@@ -107,13 +119,10 @@ def name_voices(
     Returns {"Speaker 2": {"name": "Sami Kharroub", "share": 0.92}}. A voice gets a name only
     with enough talk at caption times, most of it with one person's captions."""
     spans = [
-        (
-            (c.start - started_at).total_seconds() - CAPTION_LAG,
-            (c.end - started_at).total_seconds() + 0.5,
-            c.name,
-        )
+        (start - CAPTION_LAG, end + 0.5, c.name)
         for c in captions
         if not is_me(c.name, me_name)
+        for start, end in _talk_times(c, started_at)
     ]
     found = {}
     for label, turns in times.items():
