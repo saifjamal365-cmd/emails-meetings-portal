@@ -1,5 +1,8 @@
 # Email & Meeting Portal
 
+> **Installing it for your own use?** Follow **[CLIENT_GUIDE.md](CLIENT_GUIDE.md)** - step by
+> step, in simple English. This README is the developer's documentation.
+
 A multi-agent web portal:
 
 - **Email Priority Agent** – reads unread emails, gives High or Low priority, and writes draft replies.
