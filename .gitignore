@@ -37,3 +37,6 @@ logs/
 .DS_Store
 Thumbs.db
 ~$*
+
+# Chrome Web Store upload (made by store/make_zip.ps1)
+store/*.zip
