@@ -32,14 +32,14 @@ export default function TaskForm({ task, onSave, onDelete, onCancel }) {
         : null
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-lg border border-blue-200 bg-white p-4 shadow-sm">
+    <form onSubmit={submit} className="space-y-3 rounded-lg border border-brand-200 bg-surface p-4 shadow-sm">
       {confirmDialog}
       <h3 className="font-semibold">{task ? 'Edit task' : 'New task'}</h3>
       {task?.source_label && (
         <p className="text-xs text-slate-500">
           From{' '}
           {sourceLink ? (
-            <Link to={sourceLink} className="text-blue-700 underline">
+            <Link to={sourceLink} className="text-brand-700 underline">
               {task.source_label}
             </Link>
           ) : (
@@ -76,7 +76,7 @@ export default function TaskForm({ task, onSave, onDelete, onCancel }) {
       </div>
       <textarea dir="auto" rows={2} value={form.notes} onChange={set('notes')} placeholder="Notes" className={input} />
       <div className="flex gap-2">
-        <button type="submit" className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+        <button type="submit" className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
           {task ? 'Save' : 'Add task'}
         </button>
         <button type="button" onClick={onCancel} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">

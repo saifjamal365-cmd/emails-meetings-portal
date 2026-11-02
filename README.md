@@ -1,4 +1,4 @@
-# Email & Meeting Portal
+# Communication Portal
 
 > **Installing it for your own use?** Install Python, download the project, double-click
 > **`setup.bat`**, and fill in the **Setup** page. Step by step, in simple English:
@@ -157,7 +157,7 @@ Sending a reply to a demo email fails, because it is not in Gmail.
 
 You do these steps yourself in the Google Cloud Console, with your own Google account:
 
-1. Go to https://console.cloud.google.com and create a project (for example "Email Portal").
+1. Go to https://console.cloud.google.com and create a project (for example "Communication Portal").
 2. **APIs & Services -> Library**: enable the **Gmail API**, the **Google Calendar API** and the
    **Google Meet REST API**.
 3. **APIs & Services -> OAuth consent screen**: choose **External**, fill in the app name and

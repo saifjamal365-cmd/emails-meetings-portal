@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
+import PageHeader from '../components/PageHeader.jsx'
 import { EmailBadges } from '../components/Badges.jsx'
 import EmailDetail from '../components/EmailDetail.jsx'
 import { formatTime } from '../format.js'
@@ -22,28 +23,32 @@ export default function AllEmails() {
 
   return (
     <div className="-m-8 flex h-screen flex-col">
-      <header className="flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-4">
-        <h2 className="text-xl font-semibold">All Emails</h2>
+      <PageHeader
+        bar
+        title="All Emails"
+        meta={`${emails.length} shown`}
+        description="Every email the portal has read, High and Low, in one list. Search it, or open an email to move it between High and Low."
+      >
         <input
           dir="auto"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search subject, sender or text..."
+          aria-label="Search emails"
           className="w-80 rounded-md border border-slate-300 px-3 py-1.5 text-sm"
         />
-        <span className="text-sm text-slate-500">{emails.length} shown</span>
-      </header>
+      </PageHeader>
       {error && <p className="bg-red-50 px-6 py-2 text-sm text-red-700">{error}</p>}
       <div className="flex min-h-0 flex-1">
         <ul
-          className={`${selectedId ? 'hidden lg:block' : 'block'} w-full shrink-0 overflow-y-auto border-r border-slate-200 bg-white lg:w-96`}
+          className={`${selectedId ? 'hidden lg:block' : 'block'} w-full shrink-0 overflow-y-auto border-r border-slate-200 bg-surface lg:w-96`}
         >
           {emails.map((email) => (
             <li
               key={email.id}
               onClick={() => setSelectedId(email.id)}
               className={`cursor-pointer border-b border-slate-100 px-4 py-3 ${
-                selectedId === email.id ? 'bg-blue-50' : 'hover:bg-slate-50'
+                selectedId === email.id ? 'bg-brand-50' : 'hover:bg-slate-50'
               }`}
             >
               <div className="flex justify-between gap-2">
@@ -61,7 +66,7 @@ export default function AllEmails() {
           {selectedId && (
             <button
               onClick={() => setSelectedId(null)}
-              className="border-b border-slate-200 bg-white px-6 py-2 text-left text-sm text-blue-700 hover:bg-slate-50 lg:hidden"
+              className="border-b border-slate-200 bg-surface px-6 py-2 text-left text-sm text-brand-700 hover:bg-slate-50 lg:hidden"
             >
               ← Back to list
             </button>

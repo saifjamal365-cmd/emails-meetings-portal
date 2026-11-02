@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
+import PageHeader from '../components/PageHeader.jsx'
 import { useConfirm } from '../components/ConfirmDialog.jsx'
 
 const toText = (list) => list.join('\n')
@@ -130,12 +131,14 @@ export default function Settings({ loginRequired }) {
   return (
     <div className="max-w-2xl space-y-6">
       {confirmDialog}
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="text-2xl font-semibold">Settings</h2>
-        <Link to="/setup" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+      <PageHeader
+        title="Settings"
+        description="Connect your Google account, choose what the portal does by itself, and manage your data."
+      >
+        <Link to="/setup" className="rounded-md border border-slate-300 bg-surface px-3 py-1.5 text-sm hover:bg-slate-50">
           Password and keys
         </Link>
-      </div>
+      </PageHeader>
 
       {message.text && (
         <p className={`rounded-md px-3 py-2 text-sm ${message.error ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-800'}`}>
@@ -143,14 +146,14 @@ export default function Settings({ loginRequired }) {
         </p>
       )}
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-lg border border-slate-200 bg-surface p-4">
         <h3 className="mb-1 font-medium">Google account</h3>
         <p className="mb-3 text-sm text-slate-600">One login for Gmail (emails), Calendar and Meet (meeting transcripts).</p>
         {!google && <p className="text-sm text-slate-500">Checking...</p>}
         {google && !google.configured && (
           <p className="text-sm text-slate-600">
             Google is not set up yet. Add the Google Client ID and secret in{' '}
-            <Link to="/setup" className="text-blue-600 underline">
+            <Link to="/setup" className="text-brand-600 underline">
               Password and keys
             </Link>
             .
@@ -162,7 +165,7 @@ export default function Settings({ loginRequired }) {
             {/* Full page navigation: the backend redirects to Google, then back here. */}
             <a
               href="/api/auth/google/start"
-              className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
             >
               Connect Google
             </a>
@@ -188,7 +191,7 @@ export default function Settings({ loginRequired }) {
         )}
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-lg border border-slate-200 bg-surface p-4">
         <h3 className="mb-1 font-medium">Meetings</h3>
         <label className="mb-4 flex items-start gap-3 text-sm">
           <input
@@ -226,7 +229,7 @@ export default function Settings({ loginRequired }) {
           />
           <button
             onClick={() => save({}, 'Meeting words saved.')}
-            className="mt-2 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+            className="mt-2 rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
           >
             Save meeting words
           </button>
@@ -248,7 +251,7 @@ export default function Settings({ loginRequired }) {
         </label>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-lg border border-slate-200 bg-surface p-4">
         <h3 className="mb-1 font-medium">Google Meet helper (browser extension)</h3>
         <p className="mb-2 text-sm text-slate-600">
           In Google Meet calls it records from the moment you join until you leave, turns on the captions by itself,
@@ -278,7 +281,7 @@ export default function Settings({ loginRequired }) {
         )}
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-lg border border-slate-200 bg-surface p-4">
         <h3 className="mb-1 font-medium">Voice memory</h3>
         <label className="mb-3 flex items-start gap-3 text-sm">
           <input
@@ -333,7 +336,7 @@ export default function Settings({ loginRequired }) {
         )}
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-lg border border-slate-200 bg-surface p-4">
         <h3 className="mb-1 font-medium">Sender rules</h3>
         <p className="mb-3 text-sm text-slate-600">
           One domain per line. Rules are checked before the LLM. Leave High empty to let the agent decide
@@ -360,12 +363,12 @@ export default function Settings({ loginRequired }) {
             />
           </label>
         </div>
-        <button onClick={() => save({}, 'Sender rules saved.')} className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+        <button onClick={() => save({}, 'Sender rules saved.')} className="mt-3 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
           Save rules
         </button>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-lg border border-slate-200 bg-surface p-4">
         <h3 className="mb-1 font-medium">Portal login</h3>
         {loginRequired ? (
           <p className="text-sm text-slate-600">
@@ -381,7 +384,7 @@ export default function Settings({ loginRequired }) {
         )}
       </section>
 
-      <section className="rounded-lg border border-red-200 bg-white p-4">
+      <section className="rounded-lg border border-red-200 bg-surface p-4">
         <h3 className="mb-1 font-medium text-red-800">Delete my data</h3>
         <p className="mb-3 text-sm text-slate-600">
           Deletes the portal's copies of your emails, meetings, transcripts, summaries, tasks, plans, notifications,

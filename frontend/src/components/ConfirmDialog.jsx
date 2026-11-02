@@ -33,11 +33,11 @@ export function useConfirm() {
   }, [question, close])
 
   const dialog = question && (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => close(false)}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => close(false)}>
       <div
         role="dialog"
         aria-modal="true"
-        className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl"
+        className="w-full max-w-md rounded-lg bg-surface p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <p dir="auto" className="mb-5 text-sm text-slate-800">
@@ -47,7 +47,7 @@ export function useConfirm() {
           <button
             type="button"
             onClick={() => close(false)}
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
+            className="rounded-md border border-slate-300 bg-surface px-3 py-1.5 text-sm hover:bg-slate-50"
           >
             Cancel
           </button>
@@ -56,7 +56,7 @@ export function useConfirm() {
             autoFocus
             onClick={() => close(true)}
             className={`rounded-md px-3 py-1.5 text-sm font-medium text-white ${
-              question.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
+              question.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-brand-600 hover:bg-brand-700'
             }`}
           >
             {question.confirmLabel}

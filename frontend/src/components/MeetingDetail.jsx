@@ -65,7 +65,7 @@ function VoiceRow({ voice, suggestions, canRemember, onSave }) {
       {how && voice.name && <Badge className={how.className}>{how.text}</Badge>}
       {voice.clue && voice.how !== 'you' && <span className="text-slate-500"> · {voice.clue}</span>}
       {!editing && (
-        <button type="button" onClick={() => setEditing(true)} className="ms-2 text-xs text-blue-700 underline">
+        <button type="button" onClick={() => setEditing(true)} className="ms-2 text-xs text-brand-700 underline">
           {voice.name ? 'Change' : 'Name'}
         </button>
       )}
@@ -86,7 +86,7 @@ function VoiceRow({ voice, suggestions, canRemember, onSave }) {
               <option key={n} value={n} />
             ))}
           </datalist>
-          <button type="submit" className="rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
+          <button type="submit" className="rounded-md bg-brand-600 px-3 py-1 text-sm font-medium text-white hover:bg-brand-700">
             Save
           </button>
           <button type="button" onClick={() => setEditing(false)} className="text-sm text-slate-600 underline">
@@ -198,7 +198,7 @@ export default function MeetingDetail({ meetingId, onChanged }) {
         )}
       </Section>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-surface p-3">
         <label className="text-sm text-slate-600">Output language</label>
         <select
           value={language}
@@ -212,7 +212,7 @@ export default function MeetingDetail({ meetingId, onChanged }) {
         <button
           onClick={summarize}
           disabled={busy || !ready}
-          className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
         >
           {busy ? 'Summarizing...' : s ? 'Summarize again' : 'Summarize'}
         </button>
@@ -280,7 +280,7 @@ export default function MeetingDetail({ meetingId, onChanged }) {
                     <tr key={i} className="border-b border-slate-100 align-top">
                       <td dir="auto" className="py-1.5 pe-3">{item.task}</td>
                       <td dir="auto" className="py-1.5 pe-3">
-                        {item.owner} {item.owner_is_me && <Badge className="bg-blue-50 text-blue-700 ring-blue-200">me</Badge>}
+                        {item.owner} {item.owner_is_me && <Badge className="bg-brand-50 text-brand-700 ring-brand-200">me</Badge>}
                       </td>
                       <td className="py-1.5 whitespace-nowrap">{item.due || '-'}</td>
                     </tr>
@@ -345,7 +345,7 @@ export default function MeetingDetail({ meetingId, onChanged }) {
       </Section>
 
       {meeting.transcript_text && (
-        <details className="rounded-md border border-slate-200 bg-white p-3">
+        <details className="rounded-md border border-slate-200 bg-surface p-3">
           <summary className="cursor-pointer text-sm font-medium">Transcript</summary>
           <pre dir="auto" className="mt-2 max-h-96 overflow-y-auto whitespace-pre-wrap font-sans text-sm">
             {withNames(meeting.transcript_text, s?.speakers)}

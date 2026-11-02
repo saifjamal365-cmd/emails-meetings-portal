@@ -1,4 +1,4 @@
-// Email & Meeting Portal - Meet helper: the background part.
+// Communication Portal - Meet helper: the background part.
 //
 // Sends what meet.js noted to the portal on THIS computer (nowhere else), with the key the
 // portal gave (portal.js). If the portal is not running, the messages wait and are sent later.

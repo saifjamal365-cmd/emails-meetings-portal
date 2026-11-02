@@ -1,7 +1,7 @@
 # Privacy policy - Meet helper extension
 
-This policy is for the browser extension **"Email & Meeting Portal - Meet helper"** (the
-`extension` folder of this project). It works only together with the Email & Meeting Portal
+This policy is for the browser extension **"Communication Portal - Meet helper"** (the
+`extension` folder of this project). It works only together with the Communication Portal
 that **you** install and run on **your own computer**.
 
 ## What the extension reads

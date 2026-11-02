@@ -10,7 +10,7 @@ const KEYS = [
     help: (
       <>
         Free, for the AI. Open{' '}
-        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="text-blue-600 underline">
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="text-brand-600 underline">
           aistudio.google.com/apikey
         </a>{' '}
         and click <b>Create API key</b>.
@@ -68,8 +68,14 @@ export default function Setup({ firstRun = false, onDone }) {
 
   const input = 'w-full rounded-md border border-slate-300 px-3 py-2 text-sm'
   const form = (
-    <form onSubmit={submit} className="w-full max-w-xl space-y-5 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+    <form onSubmit={submit} className="w-full max-w-xl space-y-5 rounded-lg border border-slate-200 bg-surface p-6 shadow-sm">
       <div>
+        {firstRun && (
+          <div className="mb-4 flex items-center gap-2.5">
+            <img src="/favicon.svg" alt="" className="size-8" />
+            <span className="font-semibold tracking-tight">Communication Portal</span>
+          </div>
+        )}
         <h1 className="text-lg font-semibold">{firstRun ? 'Welcome - set up your portal' : 'Password and keys'}</h1>
         <p className="text-sm text-slate-500">
           {firstRun
@@ -105,16 +111,16 @@ export default function Setup({ firstRun = false, onDone }) {
         <ol className="mt-2 list-decimal space-y-1 pl-5">
           <li>
             Open{' '}
-            <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noreferrer" className="text-blue-600 underline">
+            <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noreferrer" className="text-brand-600 underline">
               Google Cloud
             </a>{' '}
-            and create a project named <b>Email Portal</b>. No payment method is needed.
+            and create a project named <b>Communication Portal</b>. No payment method is needed.
           </li>
           <li>APIs &amp; Services -&gt; Library: enable <b>Gmail API</b>, <b>Google Calendar API</b> and <b>Google Meet REST API</b>.</li>
           <li>OAuth consent screen: <b>External</b>, your email, and add your Gmail under <b>Test users</b>.</li>
           <li>
             Credentials -&gt; Create OAuth client ID -&gt; <b>Web application</b>, with this redirect URI:
-            <code className="mt-1 block select-all rounded bg-white px-2 py-1 text-xs">{status?.redirect_uri}</code>
+            <code className="mt-1 block select-all rounded bg-surface px-2 py-1 text-xs">{status?.redirect_uri}</code>
           </li>
           <li>Copy the Client ID and the Client secret here. Then click <b>Publish app</b> on the consent screen.</li>
         </ol>
@@ -123,7 +129,7 @@ export default function Setup({ firstRun = false, onDone }) {
       {error && <p className="text-sm text-red-600">{error}</p>}
       {message && <p className="text-sm text-emerald-700">{message}</p>}
       <button type="submit" disabled={busy || !status}
-        className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+        className="w-full rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">
         {busy ? 'Saving...' : firstRun ? 'Save and start' : 'Save'}
       </button>
       {firstRun && (

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api.js'
+import PageHeader from '../components/PageHeader.jsx'
 import { Badge } from '../components/Badges.jsx'
 import ReportCard from '../components/ReportCard.jsx'
 import TaskForm from '../components/TaskForm.jsx'
@@ -23,7 +24,7 @@ function TaskCard({ task, today, onOpen }) {
       draggable
       onDragStart={(e) => e.dataTransfer.setData('text/plain', String(task.id))}
       onClick={() => onOpen(task)}
-      className="cursor-pointer rounded-md border border-slate-200 bg-white p-3 shadow-sm hover:border-blue-300"
+      className="cursor-pointer rounded-md border border-slate-200 bg-surface p-3 shadow-sm hover:border-brand-300"
     >
       <p dir="auto" className={`text-sm font-medium ${task.status === 'Done' ? 'text-slate-400 line-through' : ''}`}>
         {task.title}
@@ -105,18 +106,19 @@ export default function Tasks() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center gap-4">
-        <h2 className="text-2xl font-semibold">Daily Tasks</h2>
-        <span className="text-slate-500">
-          {new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}
-        </span>
+      <PageHeader
+        title="Daily Tasks"
+        meta={new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}
+        description="Only your own tasks: from your meetings, from important emails, and the ones you add. Drag a card to change its status. Late tasks are red."
+        examples={['Send the price list by Thursday', 'Reply to the client about the contract', 'Prepare the weekly report']}
+      >
         <button
           onClick={() => setEditing('new')}
-          className="ms-auto rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+          className="ms-auto rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
         >
           + New task
         </button>
-      </header>
+      </PageHeader>
 
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
@@ -175,7 +177,7 @@ export default function Tasks() {
                 }}
                 onDragLeave={() => setDragOver(null)}
                 onDrop={(e) => drop(status, e)}
-                className={`min-h-40 rounded-lg p-3 ${dragOver === status ? 'bg-blue-100' : 'bg-slate-100'}`}
+                className={`min-h-40 rounded-lg p-3 ${dragOver === status ? 'bg-brand-100' : 'bg-slate-100'}`}
               >
                 <h3 className="mb-2 text-sm font-semibold text-slate-700">
                   {status} <span className="font-normal text-slate-500">({column.length})</span>

@@ -79,8 +79,8 @@ export default function SyncButton({ onDone }) {
   return (
     <div className="flex items-center gap-3">
       {running ? (
-        <span className="flex items-center gap-2 text-sm text-blue-700">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-blue-600" />
+        <span className="flex items-center gap-2 text-sm text-brand-700">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-brand-600" />
           {progressText(status)}
         </span>
       ) : (
@@ -89,7 +89,7 @@ export default function SyncButton({ onDone }) {
       <button
         onClick={sync}
         disabled={running}
-        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+        className="rounded-md border border-slate-300 bg-surface px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
       >
         {running ? 'Checking Gmail...' : 'Refresh'}
       </button>

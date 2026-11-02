@@ -1,4 +1,4 @@
-// Email & Meeting Portal - Meet helper: runs on the portal page (localhost:8000).
+// Communication Portal - Meet helper: runs on the portal page (localhost:8000).
 //
 // Connects the extension to the portal by itself: when you are logged in to the portal, it
 // takes the extension's key from the portal and gives it to the extension. Nothing to type.

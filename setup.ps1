@@ -47,7 +47,7 @@ function Test-Portal {
     catch { return $false }
 }
 
-Write-Host 'Email & Meeting Portal - setup' -ForegroundColor Green
+Write-Host 'Communication Portal - setup' -ForegroundColor Green
 Write-Host "Folder: $Root"
 if ($Root -match 'OneDrive') {
     Write-Host 'Warning: this folder is inside OneDrive. Syncing can break the database.' -ForegroundColor Yellow

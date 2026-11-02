@@ -6,7 +6,7 @@ import { useConfirm } from './ConfirmDialog.jsx'
 import Highlight from './Highlight.jsx'
 
 const button = 'rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50'
-const secondary = `${button} border border-slate-300 bg-white hover:bg-slate-50`
+const secondary = `${button} border border-slate-300 bg-surface hover:bg-slate-50`
 
 // The right side of the High / Low pages: the email, the reason, and the reply box.
 export default function EmailDetail({ emailId, onChanged }) {
@@ -74,7 +74,7 @@ export default function EmailDetail({ emailId, onChanged }) {
       </div>
 
       {email.reason && (
-        <p className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">
+        <p className="rounded-md bg-brand-50 px-3 py-2 text-sm text-brand-900">
           <span className="font-medium">Why {email.priority}: </span>
           {email.reason}
         </p>
@@ -97,14 +97,14 @@ export default function EmailDetail({ emailId, onChanged }) {
               run('unlink', () => api(`/emails/${email.id}/links/${link.id}`, { method: 'DELETE' }), 'Link removed.')
             }
             disabled={!!busy}
-            className="ms-auto rounded border border-indigo-200 bg-white px-2 py-0.5 text-xs hover:bg-indigo-100"
+            className="ms-auto rounded border border-indigo-200 bg-surface px-2 py-0.5 text-xs hover:bg-indigo-100"
           >
             Not related
           </button>
         </div>
       ))}
 
-      <div dir="auto" className="max-h-[50vh] min-h-24 overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-white p-4 text-sm leading-relaxed">
+      <div dir="auto" className="max-h-[50vh] min-h-24 overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-surface p-4 text-sm leading-relaxed">
         {email.body ? (
           <Highlight text={email.body} words={email.meeting_links.flatMap((l) => l.matched_keywords)} />
         ) : (
@@ -137,7 +137,7 @@ export default function EmailDetail({ emailId, onChanged }) {
           <button
             onClick={send}
             disabled={!!busy || !reply.trim()}
-            className={`${button} bg-blue-600 text-white hover:bg-blue-700`}
+            className={`${button} bg-brand-600 text-white hover:bg-brand-700`}
           >
             {busy === 'send' ? 'Sending...' : 'Send'}
           </button>

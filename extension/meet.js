@@ -1,4 +1,4 @@
-// Email & Meeting Portal - Meet helper: runs on meet.google.com.
+// Communication Portal - Meet helper: runs on meet.google.com.
 //
 // During a Google Meet call it
 //   1. tells the portal when you join and when you leave (the recorder starts and stops with you),

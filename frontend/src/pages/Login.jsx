@@ -23,10 +23,13 @@ export default function Login({ onLoggedIn }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
-      <form onSubmit={submit} className="w-full max-w-sm space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <div>
-          <h1 className="text-lg font-semibold">Email &amp; Meeting Portal</h1>
-          <p className="text-sm text-slate-500">Enter your portal password.</p>
+      <form onSubmit={submit} className="w-full max-w-sm space-y-4 rounded-lg border border-slate-200 bg-surface p-6 shadow-sm">
+        <div className="flex items-center gap-3">
+          <img src="/favicon.svg" alt="" className="size-10" />
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight">Communication Portal</h1>
+            <p className="text-sm text-slate-600">Your emails, meetings and tasks in one place. Enter your portal password.</p>
+          </div>
         </div>
         <input
           type="password"
@@ -41,7 +44,7 @@ export default function Login({ onLoggedIn }) {
         <button
           type="submit"
           disabled={busy || !password}
-          className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="w-full rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
         >
           {busy ? 'Checking...' : 'Log in'}
         </button>

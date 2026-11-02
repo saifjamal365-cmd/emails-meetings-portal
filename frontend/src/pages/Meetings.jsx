@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
+import PageHeader from '../components/PageHeader.jsx'
 import { Badge } from '../components/Badges.jsx'
 import MeetingDetail from '../components/MeetingDetail.jsx'
 import RecorderBar from '../components/RecorderBar.jsx'
@@ -10,7 +11,7 @@ const STATUS = {
   waiting: { text: 'Waiting for transcript', className: 'bg-amber-50 text-amber-800 ring-amber-200' },
   none: { text: 'No transcript', className: 'bg-slate-100 text-slate-500 ring-slate-200' },
   recording: { text: '● Recording', className: 'bg-red-50 text-red-700 ring-red-200' },
-  transcribing: { text: 'Writing transcript...', className: 'bg-blue-50 text-blue-700 ring-blue-200' },
+  transcribing: { text: 'Writing transcript...', className: 'bg-brand-50 text-brand-700 ring-brand-200' },
 }
 
 // Backup way: upload a transcript file (.txt / .vtt / .srt) when the API has none.
@@ -35,7 +36,7 @@ function UploadForm({ onUploaded, onCancel }) {
   }
 
   return (
-    <div className="space-y-2 border-b border-slate-200 bg-white px-6 py-4">
+    <div className="space-y-2 border-b border-slate-200 bg-surface px-6 py-4">
       <p className="text-sm text-slate-600">
         Only for meetings without a Google Meet transcript (for example Zoom or Teams for now).
       </p>
@@ -62,7 +63,7 @@ function UploadForm({ onUploaded, onCancel }) {
         <button
           onClick={submit}
           disabled={!text.trim()}
-          className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
         >
           Add meeting
         </button>
@@ -127,8 +128,13 @@ export default function Meetings() {
 
   return (
     <div className="-m-8 flex h-screen flex-col">
-      <header className="flex flex-wrap items-center gap-4 border-b border-slate-200 bg-white px-6 py-4">
-        <h2 className="text-xl font-semibold">Meetings</h2>
+      <PageHeader
+        bar
+        title="Meetings"
+        description="Your online meetings, recorded and written on this computer, then summarized: who said what, the decisions, and who must do what. Your own tasks go to Daily Tasks."
+        examples={['Google Meet calls', 'Zoom and Teams in your calendar', 'A transcript you upload']}
+      />
+      <div className="flex flex-wrap items-center gap-4 border-b border-slate-200 bg-surface px-6 py-3">
         <div className="flex rounded-md border border-slate-300 text-sm">
           {[
             ['recent', 'Recent meetings'],
@@ -137,7 +143,7 @@ export default function Meetings() {
             <button
               key={value}
               onClick={() => setTab(value)}
-              className={`px-3 py-1.5 ${tab === value ? 'bg-blue-50 font-medium text-blue-700' : 'hover:bg-slate-50'}`}
+              className={`px-3 py-1.5 ${tab === value ? 'bg-brand-50 font-medium text-brand-700' : 'hover:bg-slate-50'}`}
             >
               {label}
             </button>
@@ -154,19 +160,19 @@ export default function Meetings() {
           {message && <span className="text-sm text-slate-600">{message}</span>}
           <button
             onClick={() => setShowUpload((v) => !v)}
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
+            className="rounded-md border border-slate-300 bg-surface px-3 py-1.5 text-sm hover:bg-slate-50"
           >
             Upload transcript
           </button>
           <button
             onClick={refresh}
             disabled={busy}
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-md border border-slate-300 bg-surface px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
           >
             {busy ? 'Checking...' : 'Refresh'}
           </button>
         </div>
-      </header>
+      </div>
 
       <RecorderBar onChanged={load} />
 
@@ -183,7 +189,7 @@ export default function Meetings() {
 
       <div className="flex min-h-0 flex-1">
         <ul
-          className={`${selectedId ? 'hidden lg:block' : 'block'} w-full shrink-0 overflow-y-auto border-r border-slate-200 bg-white lg:w-96`}
+          className={`${selectedId ? 'hidden lg:block' : 'block'} w-full shrink-0 overflow-y-auto border-r border-slate-200 bg-surface lg:w-96`}
         >
           {meetings.length === 0 && (
             <li className="p-6 text-sm text-slate-500">
@@ -195,7 +201,7 @@ export default function Meetings() {
               key={m.id}
               onClick={() => setSelectedId(m.id)}
               className={`cursor-pointer border-b border-slate-100 px-4 py-3 ${
-                selectedId === m.id ? 'bg-blue-50' : 'hover:bg-slate-50'
+                selectedId === m.id ? 'bg-brand-50' : 'hover:bg-slate-50'
               }`}
             >
               <p dir="auto" className="truncate text-sm font-medium">{m.title}</p>
@@ -206,7 +212,7 @@ export default function Meetings() {
               {m.overview && <p dir="auto" className="mb-1 line-clamp-2 text-xs text-slate-600">{m.overview}</p>}
               <div className="flex gap-1">
                 {m.has_summary ? (
-                  <Badge className="bg-blue-50 text-blue-700 ring-blue-200">Summarized</Badge>
+                  <Badge className="bg-brand-50 text-brand-700 ring-brand-200">Summarized</Badge>
                 ) : (
                   <Badge className={(STATUS[m.transcript_status] ?? STATUS.none).className}>
                     {(STATUS[m.transcript_status] ?? STATUS.none).text}
@@ -220,7 +226,7 @@ export default function Meetings() {
           {selectedId && (
             <button
               onClick={() => setSelectedId(null)}
-              className="border-b border-slate-200 bg-white px-6 py-2 text-left text-sm text-blue-700 hover:bg-slate-50 lg:hidden"
+              className="border-b border-slate-200 bg-surface px-6 py-2 text-left text-sm text-brand-700 hover:bg-slate-50 lg:hidden"
             >
               ← Back to list
             </button>

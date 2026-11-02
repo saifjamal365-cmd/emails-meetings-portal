@@ -5,15 +5,15 @@ the Developer Dashboard fields.
 
 ## Store listing
 
-**Name** (from the manifest): Email & Meeting Portal - Meet helper
+**Name** (from the manifest): Communication Portal - Meet helper
 
-**Summary** (from the manifest): Tells your Email & Meeting Portal (on this computer) when you
+**Summary** (from the manifest): Tells your Communication Portal (on this computer) when you
 join and leave a Google Meet call, and who speaks when (from the live captions).
 
 **Description:**
 
 ```
-The helper for the free Email & Meeting Portal, which you run on your own computer:
+The helper for the free Communication Portal, which you run on your own computer:
 https://github.com/saifalrashadeh-star/Communication_Portal
 
 - Records your Google Meet calls from the moment you join until you leave (the portal records).
@@ -39,7 +39,7 @@ the extension connects by itself.
 **Single purpose:**
 
 ```
-Tell the user's own Email & Meeting Portal, running on the same computer, when the user joins
+Tell the user's own Communication Portal, running on the same computer, when the user joins
 and leaves a Google Meet call and who speaks when, so the portal can record the meeting and
 name the speakers in the summary.
 ```

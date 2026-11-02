@@ -1,4 +1,4 @@
-# Email & Meeting Portal - Install and User Guide
+# Communication Portal - Install and User Guide
 
 This guide is for the person who will **use** the portal on their own computer. Follow the
 steps in order. It takes about **1 hour** the first time (most of it is waiting for downloads).
@@ -96,18 +96,18 @@ permission yourself, in your own free Google Cloud project. **No payment method 
 if a page asks for a card ("Free trial"), close it.
 
 1. Open https://console.cloud.google.com/projectcreate and sign in. Name the project
-   `Email Portal` -> **Create**. Make sure this project is selected in the top bar.
+   `Communication Portal` -> **Create**. Make sure this project is selected in the top bar.
 2. **APIs & Services -> Library**. Search and **Enable** each of these:
    - **Gmail API**
    - **Google Calendar API**
    - **Google Meet REST API**
 3. **APIs & Services -> OAuth consent screen** (or **Google Auth Platform**):
-   - App name: `Email Portal`, support email: your email
+   - App name: `Communication Portal`, support email: your email
    - User type / Audience: **External**
    - **Test users**: add **your own Gmail address**
 4. **APIs & Services -> Credentials -> Create credentials -> OAuth client ID**:
    - Application type: **Web application** (not "Desktop app")
-   - Name: `Email Portal`
+   - Name: `Communication Portal`
    - **Authorized redirect URIs** -> Add URI:
      `http://localhost:8000/api/auth/google/callback`
    - Click **Create**, then copy the **Client ID** and the **Client secret**.
@@ -137,7 +137,7 @@ Password and keys**.
 
 Then:
 1. **Settings -> Google account -> Connect Google** and allow everything.
-   (If Google warns "hasn't verified this app": **Advanced -> Go to Email Portal**.)
+   (If Google warns "hasn't verified this app": **Advanced -> Go to Communication Portal**.)
 2. **Dashboard -> Refresh**: your unread emails come in and get High/Low.
 
 Optional, for meetings mostly in English: open `backend\.env` in Notepad, add the line

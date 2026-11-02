@@ -72,7 +72,7 @@ export default function ReportCard({ kind, day, report, isToday, onChanged }) {
   }
 
   return (
-    <section className="flex flex-col rounded-lg border border-slate-200 bg-white p-4">
+    <section className="flex flex-col rounded-lg border border-slate-200 bg-surface p-4">
       {confirmDialog}
       <div className="mb-2 flex items-start justify-between gap-2">
         <div>
@@ -100,7 +100,7 @@ export default function ReportCard({ kind, day, report, isToday, onChanged }) {
             <button
               onClick={generate}
               disabled={busy}
-              className="rounded-md bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded-md bg-brand-600 px-2 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
             >
               {busy ? 'Making...' : report ? 'Make again' : t.button}
             </button>
@@ -120,7 +120,7 @@ export default function ReportCard({ kind, day, report, isToday, onChanged }) {
             className="w-full rounded-md border border-slate-300 p-2 font-mono text-xs"
           />
           <div className="mt-2 flex gap-2">
-            <button onClick={save} className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700">
+            <button onClick={save} className="rounded-md bg-brand-600 px-3 py-1 text-xs font-medium text-white hover:bg-brand-700">
               Save
             </button>
             <button onClick={() => setEditing(false)} className="rounded-md border border-slate-300 px-3 py-1 text-xs hover:bg-slate-50">

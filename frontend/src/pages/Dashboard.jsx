@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react'
+import { Rocket } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api } from '../api.js'
 import { EmailBadges } from '../components/Badges.jsx'
+import PageHeader from '../components/PageHeader.jsx'
 import SyncButton from '../components/SyncButton.jsx'
+
+// A number is coloured only when it is not zero: red needs you, amber is soon, green is done.
+const TONE = { urgent: 'text-red-700', soon: 'text-amber-700', good: 'text-emerald-700' }
 
 // Counts, today's plan, the High emails that need an answer, system status, LLM test.
 export default function Dashboard() {
@@ -17,6 +22,7 @@ export default function Dashboard() {
   const [taskCounts, setTaskCounts] = useState(null)
   const [plan, setPlan] = useState(null)
   const [urgent, setUrgent] = useState([])
+  const [google, setGoogle] = useState(null)
 
   function loadCounts() {
     api('/emails/counts').then(setCounts).catch(() => setCounts(null))
@@ -30,6 +36,7 @@ export default function Dashboard() {
       .then(setHealth)
       .catch(() => setHealthError('Backend is not running. Start it with: uvicorn app.main:app --reload'))
     loadCounts()
+    api('/auth/google/status').then(setGoogle).catch(() => setGoogle(null))
   }, [])
 
   async function testLlm() {
@@ -47,40 +54,79 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-5xl">
-      <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-2xl font-semibold">Dashboard</h2>
+      <PageHeader
+        title="Dashboard"
+        description="Your day at a glance: what needs an answer, what is due, and today's plan. Click a number to open its page."
+      >
         <SyncButton onDone={loadCounts} />
-      </div>
+      </PageHeader>
+
+      {google && !google.connected && (
+        <section className="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-brand-200 bg-brand-50 px-5 py-4">
+          <Rocket className="size-6 shrink-0 text-brand-700" strokeWidth={1.75} aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <h3 className="font-semibold text-brand-900">Getting started: connect your Google account</h3>
+            <p className="text-sm text-brand-800">
+              {google.configured
+                ? 'Then the portal reads your new emails, finds your meetings in the calendar, and fills this page.'
+                : 'First add your Google Client ID and secret, then connect. Then the portal reads your emails and meetings.'}
+            </p>
+          </div>
+          <Link
+            to={google.configured ? '/settings' : '/setup'}
+            className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            {google.configured ? 'Connect Google' : 'Add the Google keys'}
+          </Link>
+        </section>
+      )}
 
       {counts && taskCounts && (
-        <section className="mb-6 grid grid-cols-4 gap-3">
+        <section className="mb-6 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-surface">
           {[
-            { label: 'High to answer', value: counts.high, to: '/high', color: 'text-red-700' },
-            { label: 'Low', value: counts.low, to: '/low', color: 'text-slate-700' },
-            { label: 'Unread', value: counts.unread, to: '/emails', color: 'text-slate-700' },
-            { label: 'Replies sent today', value: counts.sent_today, to: '/emails', color: 'text-emerald-700' },
-            { label: 'Late tasks', value: taskCounts.late, to: '/tasks', color: 'text-red-700' },
-            { label: 'Tasks due today', value: taskCounts.due_today, to: '/tasks', color: 'text-amber-700' },
-            { label: 'Open tasks', value: taskCounts.open, to: '/tasks', color: 'text-slate-700' },
-            { label: 'Tasks done today', value: taskCounts.done_today, to: '/tasks', color: 'text-emerald-700' },
-          ].map((card) => (
-            <Link
-              key={card.label}
-              to={card.to}
-              className="rounded-lg border border-slate-200 bg-white p-4 hover:border-blue-300"
-            >
-              <p className={`text-2xl font-semibold ${card.color}`}>{card.value}</p>
-              <p className="text-sm text-slate-600">{card.label}</p>
-            </Link>
+            {
+              title: 'Emails',
+              items: [
+                { label: 'High to answer', value: counts.high, to: '/high', tone: 'urgent' },
+                { label: 'Low', value: counts.low, to: '/low' },
+                { label: 'Unread', value: counts.unread, to: '/emails' },
+                { label: 'Replies sent today', value: counts.sent_today, to: '/emails', tone: 'good' },
+              ],
+            },
+            {
+              title: 'Tasks',
+              items: [
+                { label: 'Late', value: taskCounts.late, to: '/tasks', tone: 'urgent' },
+                { label: 'Due today', value: taskCounts.due_today, to: '/tasks', tone: 'soon' },
+                { label: 'Open', value: taskCounts.open, to: '/tasks' },
+                { label: 'Done today', value: taskCounts.done_today, to: '/tasks', tone: 'good' },
+              ],
+            },
+          ].map((row) => (
+            <div key={row.title} className="flex flex-wrap items-stretch">
+              <p className="flex w-24 items-center px-4 text-sm font-medium text-slate-600">{row.title}</p>
+              {row.items.map((item) => (
+                <Link
+                  key={item.label}
+                  to={item.to}
+                  className="group flex min-w-36 flex-1 items-baseline gap-2 border-s border-slate-200 px-4 py-3 transition-colors duration-150 hover:bg-slate-50"
+                >
+                  <span className={`tabular text-2xl font-semibold ${item.value ? TONE[item.tone] ?? 'text-slate-900' : 'text-slate-400'}`}>
+                    {item.value}
+                  </span>
+                  <span className="text-sm text-slate-600 group-hover:text-slate-900">{item.label}</span>
+                </Link>
+              ))}
+            </div>
           ))}
         </section>
       )}
 
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <section className="rounded-lg border border-slate-200 bg-surface p-4">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="font-medium">Today's plan</h3>
-            <Link to="/tasks" className="text-sm text-blue-700 hover:underline">Open Daily Tasks</Link>
+            <Link to="/tasks" className="text-sm text-brand-700 hover:underline">Open Daily Tasks</Link>
           </div>
           {plan ? (
             <p dir="auto" className="line-clamp-[10] whitespace-pre-wrap text-sm text-slate-700">
@@ -91,10 +137,10 @@ export default function Dashboard() {
           )}
         </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <section className="rounded-lg border border-slate-200 bg-surface p-4">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="font-medium">Needs your answer</h3>
-            <Link to="/high" className="text-sm text-blue-700 hover:underline">High Priority</Link>
+            <Link to="/high" className="text-sm text-brand-700 hover:underline">High Priority</Link>
           </div>
           {urgent.length === 0 ? (
             <p className="text-sm text-slate-500">No High emails waiting.</p>
@@ -114,7 +160,7 @@ export default function Dashboard() {
         </section>
       </div>
 
-      <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+      <section className="mb-6 rounded-lg border border-slate-200 bg-surface p-4">
         <h3 className="mb-2 font-medium">System status</h3>
         {healthError && <p className="text-sm text-red-600">{healthError}</p>}
         {health && (
@@ -130,7 +176,7 @@ export default function Dashboard() {
         {!health && !healthError && <p className="text-sm text-slate-500">Checking...</p>}
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-lg border border-slate-200 bg-surface p-4">
         <h3 className="mb-2 font-medium">Test the LLM</h3>
         <textarea
           dir="auto"
@@ -142,7 +188,7 @@ export default function Dashboard() {
         <button
           onClick={testLlm}
           disabled={loading || !message.trim()}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
         >
           {loading ? 'Asking...' : 'Send to LLM'}
         </button>

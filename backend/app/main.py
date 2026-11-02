@@ -50,7 +50,7 @@ async def lifespan(_: FastAPI):
         scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="Email & Meeting Portal API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Communication Portal API", version="1.0.0", lifespan=lifespan)
 
 
 # Middleware: the last one added runs first. Order of a request:

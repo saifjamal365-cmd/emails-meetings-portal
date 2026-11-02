@@ -75,7 +75,7 @@ export default function RecorderBar({ onChanged }) {
   if (!status) return null
 
   return (
-    <div className="border-b border-slate-200 bg-white px-6 py-3">
+    <div className="border-b border-slate-200 bg-surface px-6 py-3">
       {status.running ? (
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <span className="h-3 w-3 animate-pulse rounded-full bg-red-600" />
@@ -116,7 +116,7 @@ export default function RecorderBar({ onChanged }) {
             Not recording. Meetings in your calendar are recorded automatically when <b>Auto-record</b> is on
             (Settings).
           </span>
-          <button onClick={() => setShowStart(true)} className="ms-auto rounded-md border border-slate-300 bg-white px-3 py-1.5 font-medium hover:bg-slate-50">
+          <button onClick={() => setShowStart(true)} className="ms-auto rounded-md border border-slate-300 bg-surface px-3 py-1.5 font-medium hover:bg-slate-50">
             ● Record now
           </button>
         </div>
