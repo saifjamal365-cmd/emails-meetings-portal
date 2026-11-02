@@ -210,29 +210,29 @@ def test_voices_get_the_names_google_meet_shows() -> None:
 
 
 def test_a_long_open_caption_box_does_not_hide_others() -> None:
-    """The real meeting of 1 Oct: Meet kept Durrah's caption box open for 17 minutes. Its
-    "spans" say when her words really grew, so Fahad, who spoke in between, gets his name."""
+    """The real meeting of 1 Oct: Meet kept Sara's caption box open for 17 minutes. Its
+    "spans" say when her words really grew, so Omar, who spoke in between, gets his name."""
     base = datetime(2026, 10, 1, 13, 37)
 
     def at(seconds: float) -> int:
         return ms(base + timedelta(seconds=seconds))
 
-    durrah = _caption("Durrah Dahash", 0, 17 * 60, base)  # one box from 13:37 to 13:54
-    durrah.spans = [[at(0), at(400)], [at(460), at(1020)]]  # quiet from 400 s to 460 s
-    fahad = _caption("Fahad Aljuaylan", 405, 455, base)
+    sara = _caption("Sara Ahmad", 0, 17 * 60, base)  # one box from 13:37 to 13:54
+    sara.spans = [[at(0), at(400)], [at(460), at(1020)]]  # quiet from 400 s to 460 s
+    omar = _caption("Omar Khalid", 405, 455, base)
     times = {"Speaker 1": [(406.0, 454.0)], "Speaker 2": [(10.0, 390.0), (470.0, 1000.0)]}
 
-    found = meet_helper.name_voices(times, base, [durrah, fahad], "Saif jamal")
+    found = meet_helper.name_voices(times, base, [sara, omar], "Saif jamal")
     assert {label: v["name"] for label, v in found.items()} == {
-        "Speaker 1": "Fahad Aljuaylan",
-        "Speaker 2": "Durrah Dahash",
+        "Speaker 1": "Omar Khalid",
+        "Speaker 2": "Sara Ahmad",
     }
 
 
 def test_spans_are_saved_from_the_extension(client, db, key) -> None:
     now = datetime.now()
     line = {
-        "id": "s1", "name": "Durrah Dahash", "text": "...",
+        "id": "s1", "name": "Sara Ahmad", "text": "...",
         "start": ms(now), "end": ms(now + timedelta(seconds=60)),
         "spans": [[ms(now), ms(now + timedelta(seconds=5))]],
     }  # fmt: skip

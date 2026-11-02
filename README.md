@@ -1,7 +1,8 @@
 # Email & Meeting Portal
 
-> **Installing it for your own use?** Follow **[CLIENT_GUIDE.md](CLIENT_GUIDE.md)** - step by
-> step, in simple English. This README is the developer's documentation.
+> **Installing it for your own use?** Install Python, download the project, double-click
+> **`setup.bat`**, and fill in the **Setup** page. Step by step, in simple English:
+> **[CLIENT_GUIDE.md](CLIENT_GUIDE.md)**. This README is the developer's documentation.
 
 A multi-agent web portal:
 
@@ -96,8 +97,19 @@ Get-Content backend\data\logs\portal.log -Tail 30        # see the last log line
 Unregister-ScheduledTask -TaskName "Email Meeting Portal" -Confirm:$false   # remove auto-start
 ```
 
-After you change the frontend, build it again (`cd frontend && npm run build`) and restart
-the task. For development with live reload, stop the task and use the two commands below.
+**Installer:** `setup.bat` (runs `setup.ps1`) checks Python 3.12+, creates `backend\.venv`,
+installs the libraries, registers the task above, starts it and opens the portal. Run it
+again to update; it stops only this folder's portal and keeps `.env` and `data`.
+
+**Setup page:** while the portal password or the Gemini key is missing, the portal shows a
+Setup page instead (`/api/setup`, `app/routes/setup.py`). It writes the values into
+`backend/.env` (other lines are kept) and uses them at once, without a restart. Before a
+password exists only this computer may call it; after that only the logged-in owner, and never
+from another website (Origin check). Later: Settings -> **Password and keys**.
+
+**The built pages are in Git** (`frontend/dist`), so users need no Node.js. After you change
+the frontend, run `cd frontend && npm run build` **before every commit**, and restart the task.
+For development with live reload, stop the task and use the two commands below.
 
 ## Run it (Windows)
 
@@ -440,7 +452,3 @@ cd backend
 It uses a temporary database (your data is safe) and about 33 calls of your free Gemini
 quota (it takes a few minutes because calls are spaced out). If the accuracy is too low, improve
 `app/prompts/email_priority.txt` and run it again.
-
-## Next: Phase 2 – Email agent
-
-Connect Gmail (Google Cloud project + OAuth), read unread emails, add the priority rules and the LLM check, and build the High and Low reply pages.

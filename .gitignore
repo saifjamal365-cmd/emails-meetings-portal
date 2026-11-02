@@ -20,9 +20,9 @@ backend/data/recordings/
 # Voice separation models (downloaded, ~46 MB)
 backend/data/speakers/
 
-# Frontend
+# Frontend (frontend/dist is kept: the built portal, so users do not need Node.js.
+# Run "npm run build" before every commit that changes frontend/src.)
 node_modules/
-dist/
 
 # Logs
 logs/

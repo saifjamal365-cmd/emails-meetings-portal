@@ -66,6 +66,12 @@ def _get_client() -> genai.Client:
     return _client
 
 
+def reset_client() -> None:
+    """Forget the client, so the next call uses the new key (saved on the Setup page)."""
+    global _client
+    _client = None
+
+
 def _wait_for_rate_limit() -> None:
     """Keep a small gap between calls (the free tier allows only a few calls per minute)."""
     global _last_call

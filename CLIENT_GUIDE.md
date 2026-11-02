@@ -16,7 +16,7 @@ steps in order. It takes about **1 hour** the first time (most of it is waiting 
 | **Meet helper** (browser extension) | In Google Meet: records from the moment you join until you leave, turns on the captions, and gives every voice its real name. |
 
 Everything is **free**. Your emails, recordings and tasks stay **on your computer**. Only the
-text that must be summarized is sent to Google Gemini (see section 16, Privacy).
+text that must be summarized is sent to Google Gemini (see section 15, Privacy).
 
 ---
 
@@ -46,57 +46,42 @@ for meetings**, and it starts by itself when you log in to Windows.
 
 ---
 
-## 4. Install the programs (once)
+## 4. Install Python (once)
 
-Install these three free programs. Keep the default options.
+1. Download **Python 3.12 or newer** from https://www.python.org/downloads/
+2. On the first screen of the installer, tick **"Add python.exe to PATH"**, then click
+   **Install Now**.
 
-1. **Python 3.12** - https://www.python.org/downloads/
-   On the first screen, tick **"Add python.exe to PATH"**.
-2. **Node.js (LTS)** - https://nodejs.org (only needed to build the portal pages)
-3. **Git** - https://git-scm.com/download/win (to download and update the portal)
-
-Check them: open **PowerShell** and type:
-
-```powershell
-python --version
-node --version
-git --version
-```
-
-You should see a version number for each (Python must be **3.12** or newer).
+That is the only program you need. (Node.js and Git are not needed.)
 
 ---
 
-## 5. Get the portal (once)
+## 5. Get the portal
 
-In PowerShell, go to the folder where you want the portal (for example your Documents) and
-download it:
+1. Open https://github.com/saifalrashadeh-star/Communication_Portal
+2. Click the green **Code** button -> **Download ZIP**.
+3. Unzip it into a folder that OneDrive does **not** sync, for example
+   `Documents\Communication_Portal`. (Syncing can break the database.)
 
-```powershell
-cd $HOME\Documents
-git clone https://github.com/saifjamal365-cmd/emails-meetings-portal.git
-cd emails-meetings-portal
-```
-
-> If the repository is private, the developer must give your GitHub account access first, or
-> send you the project as a ZIP file (then unzip it and `cd` into the folder).
-
-Now install the portal's parts. **Run these commands from the `emails-meetings-portal`
-folder.** This takes 5-15 minutes:
-
-```powershell
-cd backend
-python -m venv .venv
-.venv\Scripts\python -m pip install -e .
-cd ..\frontend
-npm install
-npm run build
-cd ..
-```
+> With Git you can instead run
+> `git clone https://github.com/saifalrashadeh-star/Communication_Portal.git`
 
 ---
 
-## 6. Get your free Gemini key (the AI)
+## 6. Run the installer (once)
+
+1. Open the portal folder and **double-click `setup.bat`**.
+2. If Windows shows "Windows protected your PC", click **More info -> Run anyway**.
+3. Wait. The first time it downloads the libraries (**5-15 minutes**). It also makes the
+   portal start by itself every time you log in to Windows (hidden, no window).
+4. When it says **Done**, the portal opens in your browser at **http://localhost:8000**
+   with the **Setup** page.
+
+Keep the next two sections open: the Setup page asks for the keys they give you.
+
+---
+
+## 7. Get your free Gemini key (the AI)
 
 1. Open https://aistudio.google.com/apikey and sign in with your Google account.
 2. Click **Create API key** and copy it.
@@ -104,125 +89,73 @@ cd ..
 
 ---
 
-## 7. Connect your Google account - Google Cloud setup (once, about 15 minutes)
+## 8. Get your Google keys - Google Cloud setup (once, about 15 minutes)
 
 The portal needs permission to read your Gmail, calendar and Google Meet. You create this
-permission yourself, in your own free Google Cloud project:
+permission yourself, in your own free Google Cloud project. **No payment method is needed** -
+if a page asks for a card ("Free trial"), close it.
 
-1. Open https://console.cloud.google.com and sign in.
-2. At the top, click the project list -> **New project** -> name it `Email Portal` -> **Create**.
-   Make sure this new project is selected.
-3. **APIs & Services -> Library**. Search and **Enable** each of these:
+1. Open https://console.cloud.google.com/projectcreate and sign in. Name the project
+   `Email Portal` -> **Create**. Make sure this project is selected in the top bar.
+2. **APIs & Services -> Library**. Search and **Enable** each of these:
    - **Gmail API**
    - **Google Calendar API**
    - **Google Meet REST API**
-4. **APIs & Services -> OAuth consent screen** (or **Google Auth Platform**):
-   - User type: **External**
-   - App name: `Email Portal`, support email: your email, developer email: your email
-   - **Audience / Test users**: add **your own Gmail address**
-5. **APIs & Services -> Credentials -> Create credentials -> OAuth client ID**:
-   - Application type: **Web application**
+3. **APIs & Services -> OAuth consent screen** (or **Google Auth Platform**):
+   - App name: `Email Portal`, support email: your email
+   - User type / Audience: **External**
+   - **Test users**: add **your own Gmail address**
+4. **APIs & Services -> Credentials -> Create credentials -> OAuth client ID**:
+   - Application type: **Web application** (not "Desktop app")
    - Name: `Email Portal`
    - **Authorized redirect URIs** -> Add URI:
      `http://localhost:8000/api/auth/google/callback`
    - Click **Create**, then copy the **Client ID** and the **Client secret**.
 
 > **Important - stay connected:** while the app is in **"Testing"**, Google disconnects it
-> about **every 7 days** (the portal then shows "Reconnect"). To avoid that, go to
-> **OAuth consent screen / Audience** and click **Publish app** ("In production"). For your own
-> use you do **not** need Google's verification: when you connect, Google shows "Google hasn't
-> verified this app" -> click **Advanced -> Go to Email Portal (unsafe)** once. It is your own
-> app.
+> about **every 7 days**. To avoid that, go to **OAuth consent screen / Audience** and click
+> **Publish app**. For your own use you do **not** need Google's verification: when you
+> connect, Google shows "Google hasn't verified this app" -> click **Advanced -> Go to Email
+> Portal (unsafe)** once. It is your own app.
 
 ---
 
-## 8. Your settings file `.env` (once)
+## 9. The Setup page (once)
 
-1. In the folder `backend`, copy the example file:
+On http://localhost:8000 the **Setup** page asks for:
 
-   ```powershell
-   copy backend\.env.example backend\.env
-   notepad backend\.env
-   ```
+| Field | What to type |
+| --- | --- |
+| **Portal password** (twice) | A password **you choose** (8 characters or more). You use it to open the portal. |
+| **Gemini API key** | The key from section 7 |
+| **Google Client ID** | From section 8 (it ends with `.apps.googleusercontent.com`) |
+| **Google Client secret** | From section 8 |
 
-2. Fill in these lines (no spaces around `=`), then save:
+Click **Save and start**. The keys are saved only on this computer (in `backend\.env`) and
+work at once. Saved keys are never shown again; to change one later, go to **Settings ->
+Password and keys**.
 
-   ```
-   GEMINI_API_KEY=your-gemini-key
-   PORTAL_PASSWORD=choose-a-strong-password
-   GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-   GOOGLE_CLIENT_SECRET=your-client-secret
-   FRONTEND_ORIGIN=http://localhost:8000
-   ```
-
-   - `PORTAL_PASSWORD` is the password **you** will use to open the portal.
-   - `FRONTEND_ORIGIN` must be exactly `http://localhost:8000`, or the Google login will not
-     come back to the portal.
-   - **Never share this file.** It holds your keys.
-
-3. Optional: the main language of your meetings. Arabic is the default. For meetings mostly
-   in English add: `WHISPER_LANGUAGE=en`
-
----
-
-## 9. First start and test
-
-In PowerShell, from the `emails-meetings-portal` folder:
-
-```powershell
-backend\.venv\Scripts\python backend\run_portal.py
-```
-
-Leave this window open, then:
-
-1. Open **http://localhost:8000** in Chrome and log in with your `PORTAL_PASSWORD`.
-2. Go to **Settings -> Google account -> Connect Google** and allow everything.
+Then:
+1. **Settings -> Google account -> Connect Google** and allow everything.
    (If Google warns "hasn't verified this app": **Advanced -> Go to Email Portal**.)
-3. Go to the **Dashboard** and click **Refresh**: your unread emails come in and get High/Low.
+2. **Dashboard -> Refresh**: your unread emails come in and get High/Low.
 
-If this works, close the PowerShell window (this stops the test server) and continue.
-
----
-
-## 10. Start it with Windows (once)
-
-So the portal runs by itself every time you log in (hidden, no window). In PowerShell, from
-the `emails-meetings-portal` folder, paste this whole block:
-
-```powershell
-$folder = (Resolve-Path .\backend).Path
-$action = New-ScheduledTaskAction -Execute "$folder\.venv\Scripts\pythonw.exe" `
-  -Argument "`"$folder\run_portal.py`"" -WorkingDirectory $folder
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-  -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew
-Register-ScheduledTask -TaskName "Email Meeting Portal" -Action $action -Trigger $trigger -Settings $settings
-Start-ScheduledTask -TaskName "Email Meeting Portal"
-```
-
-Open **http://localhost:8000** - the portal is there. Add it to your browser bookmarks.
-
-Useful commands:
-
-```powershell
-Start-ScheduledTask -TaskName "Email Meeting Portal"     # start now
-Stop-ScheduledTask -TaskName "Email Meeting Portal"      # stop
-Get-Content backend\data\logs\portal.log -Tail 30       # see what it did last
-```
+Optional, for meetings mostly in English: open `backend\.env` in Notepad, add the line
+`WHISPER_LANGUAGE=en`, save, and restart the portal (or your computer). Arabic is the default.
 
 ---
 
-## 11. Install the Meet helper (once, in Chrome or Edge)
+## 10. Install the Meet helper (once, in Chrome or Edge)
 
 1. Open `chrome://extensions` (Edge: `edge://extensions`).
 2. Turn on **Developer mode** (Chrome: top-right corner; Edge: bottom of the left menu).
-3. Click **Load unpacked** and choose the folder `emails-meetings-portal\extension`.
+3. Click **Load unpacked** and choose the `extension` folder inside the portal folder.
 4. Go to your portal tab and **reload it (F5)**. It connects by itself in a few seconds.
 5. **Settings -> Google Meet helper** shows **Connected**.
 
 ---
 
-## 12. Turn on the automatic features (Settings page)
+## 11. Turn on the automatic features (Settings page)
 
 | Setting | What to do |
 | --- | --- |
@@ -232,9 +165,17 @@ Get-Content backend\data\logs\portal.log -Tail 30       # see what it did last
 | **Sender rules** | Optional: email domains that are always High or always Low |
 | **Remember the voices** | Optional. Turn on **only after the people in your meetings agreed** (a voice print is personal data). |
 
+Useful commands (PowerShell):
+
+```powershell
+Start-ScheduledTask -TaskName "Email Meeting Portal"     # start now
+Stop-ScheduledTask -TaskName "Email Meeting Portal"      # stop
+Get-Content backend\data\logs\portal.log -Tail 30       # see what it did last
+```
+
 ---
 
-## 13. Daily use
+## 12. Daily use
 
 **Emails**
 - **High Priority**: emails that need you, with a draft reply. Edit it and click **Send**
@@ -260,12 +201,13 @@ Get-Content backend\data\logs\portal.log -Tail 30       # see what it did last
 
 ---
 
-## 14. Troubleshooting
+## 13. Troubleshooting
 
 | Problem | What to do |
 | --- | --- |
+| Setup page: "Choose a portal password" | Type a password in both password fields (8 characters or more). |
 | The portal does not open | `Start-ScheduledTask -TaskName "Email Meeting Portal"`, wait 20 seconds, open http://localhost:8000 again. Check the log: `Get-Content backend\data\logs\portal.log -Tail 30` |
-| Settings shows **Reconnect** for Google | Click it. If it happens every week, publish the Google app (section 7). |
+| Settings shows **Reconnect** for Google | Click it. If it happens every week, publish the Google app (section 8). |
 | Meet helper says **Not connected** | Reload the portal page (F5) in the browser where the extension is installed. In `chrome://extensions`, check the extension is switched on. |
 | The meeting summary has **only your voice** | The other people's voices did not go to your speakers. With **Bluetooth earbuds**, do **not** use the earbuds' microphone in Meet: choose the **laptop microphone**, and as speaker the earbuds' **"Stereo"/"Headphones"** device (not "Hands-Free"). |
 | "No speech was found in the recording" | Nobody talked, or the microphone is muted / blocked in Windows: **Settings -> Privacy -> Microphone** -> allow apps. |
@@ -275,22 +217,19 @@ Get-Content backend\data\logs\portal.log -Tail 30       # see what it did last
 
 ---
 
-## 15. Update to a new version
+## 14. Update to a new version
 
-```powershell
-cd $HOME\Documents\emails-meetings-portal
-Stop-ScheduledTask -TaskName "Email Meeting Portal"
-git pull
-backend\.venv\Scripts\python -m pip install -e backend
-cd frontend; npm install; npm run build; cd ..
-Start-ScheduledTask -TaskName "Email Meeting Portal"
-```
+Your settings and data (`backend\.env` and `backend\data`) are kept.
 
-Then reload the Meet helper: `chrome://extensions` -> the **circular arrow** on its card.
+1. **With the ZIP:** download the new ZIP and unzip it **over** your portal folder (replace
+   the files). **With Git:** run `git pull` in the portal folder.
+2. Double-click **`setup.bat`** again. It stops the portal, updates it and starts it again.
+   Do not do this during a meeting recording.
+3. Reload the Meet helper: `chrome://extensions` -> the **circular arrow** on its card.
 
 ---
 
-## 16. Privacy and rules
+## 15. Privacy and rules
 
 - **Recording**: always tell the people in the meeting that it is recorded.
 - **Audio** is deleted after the transcript is made. Transcripts, summaries and emails stay in

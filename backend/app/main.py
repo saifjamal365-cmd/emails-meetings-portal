@@ -28,6 +28,7 @@ from app.routes import (
     notifications,
     reports,
     settings,
+    setup,
     tasks,
     voices,
 )
@@ -109,6 +110,7 @@ for module in (
     data,
     google_auth,
     settings,
+    setup,
     voices,
     extension,
 ):

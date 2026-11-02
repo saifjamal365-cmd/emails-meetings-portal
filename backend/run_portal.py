@@ -9,6 +9,7 @@ The log is written to data/logs/portal.log (the last 3 files of 5 MB are kept).
 """
 
 import logging
+import os
 import socket
 import sys
 from logging.handlers import RotatingFileHandler
@@ -25,6 +26,9 @@ def port_in_use() -> bool:
 
 def main() -> None:
     sys.path.insert(0, str(HERE))
+    # The portal is always at this address here, so Google's login comes back to it
+    # even when .env has no FRONTEND_ORIGIN line (set by the Setup page or not).
+    os.environ.setdefault("FRONTEND_ORIGIN", f"http://localhost:{PORT}")
     from app.config import get_settings  # after sys.path, so "app" is found
 
     logs = get_settings().data_dir / "logs"

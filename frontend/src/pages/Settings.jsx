@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import { useConfirm } from '../components/ConfirmDialog.jsx'
 
@@ -130,7 +130,12 @@ export default function Settings({ loginRequired }) {
   return (
     <div className="max-w-2xl space-y-6">
       {confirmDialog}
-      <h2 className="text-2xl font-semibold">Settings</h2>
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-2xl font-semibold">Settings</h2>
+        <Link to="/setup" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+          Password and keys
+        </Link>
+      </div>
 
       {message.text && (
         <p className={`rounded-md px-3 py-2 text-sm ${message.error ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-800'}`}>
@@ -144,8 +149,11 @@ export default function Settings({ loginRequired }) {
         {!google && <p className="text-sm text-slate-500">Checking...</p>}
         {google && !google.configured && (
           <p className="text-sm text-slate-600">
-            Google is not set up yet. Add <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> to{' '}
-            <code>backend/.env</code> and restart the backend (see README, "Connect Google").
+            Google is not set up yet. Add the Google Client ID and secret in{' '}
+            <Link to="/setup" className="text-blue-600 underline">
+              Password and keys
+            </Link>
+            .
           </p>
         )}
         {google?.configured && !google.connected && (
