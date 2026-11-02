@@ -12,7 +12,9 @@ def env(tmp_path, monkeypatch):
     """A temporary .env, and the settings put back after the test."""
     monkeypatch.setattr(setup, "ENV_FILE", tmp_path / ".env")
     example = tmp_path / ".env.example"
-    example.write_text("# keys\nGEMINI_API_KEY=\nPORTAL_PASSWORD=\nFRONTEND_ORIGIN=http://localhost:8000\n")
+    example.write_text(
+        "# keys\nGEMINI_API_KEY=\nPORTAL_PASSWORD=\nFRONTEND_ORIGIN=http://localhost:8000\n"
+    )
     monkeypatch.setattr(setup, "EXAMPLE_FILE", example)
     for field, name in setup.FIELDS.items():
         monkeypatch.setattr(get_settings(), field, "")
@@ -56,7 +58,7 @@ def test_saving_writes_env_and_works_without_a_restart(client, env, monkeypatch)
 
 
 def test_values_with_quotes_and_spaces_survive_the_env_file(client, env) -> None:
-    password = "it's a #pass = \\ with \"quotes\" وكلمة"
+    password = 'it\'s a #pass = \\ with "quotes" وكلمة'
     assert client.post("/api/setup", json={"portal_password": password}).status_code == 200
     assert Settings(_env_file=env).portal_password == password
 
@@ -88,7 +90,9 @@ def test_after_setup_only_the_owner_can_change_the_keys(client, env) -> None:
 
 def test_another_website_cannot_save(client, env) -> None:
     response = client.post(
-        "/api/setup", json={"portal_password": "evil-pass"}, headers={"Origin": "https://evil.example"}
+        "/api/setup",
+        json={"portal_password": "evil-pass"},
+        headers={"Origin": "https://evil.example"},
     )
     assert response.status_code == 403
     assert get_settings().portal_password == ""

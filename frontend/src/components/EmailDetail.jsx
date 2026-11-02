@@ -1,3 +1,4 @@
+import { AlertTriangle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api.js'
@@ -14,6 +15,7 @@ export default function EmailDetail({ emailId, onChanged }) {
   const [reply, setReply] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState('')
+  const [moving, setMoving] = useState(false) // shows "only this email / always for this sender"
   const [message, setMessage] = useState({ text: '', error: false })
   const [confirmDialog, confirm] = useConfirm()
 
@@ -52,6 +54,15 @@ export default function EmailDetail({ emailId, onChanged }) {
   const closed = ['Sent', 'Skipped', 'Archived'].includes(email.reply_status)
   const other = email.priority === 'High' ? 'Low' : 'High'
 
+  function move(remember) {
+    setMoving(false)
+    run(
+      'move',
+      () => api(`/emails/${email.id}/priority`, { method: 'POST', body: { priority: other, remember } }),
+      remember ? `Moved to ${other}. New emails from ${email.sender} go to ${other} too.` : `Moved to ${other}.`,
+    )
+  }
+
   async function send() {
     const ok = await confirm(`Send this reply to ${email.sender}? It is sent from your Gmail.`, {
       confirmLabel: 'Send',
@@ -72,6 +83,16 @@ export default function EmailDetail({ emailId, onChanged }) {
           <EmailBadges email={email} />
         </div>
       </div>
+
+      {email.warning && (
+        <p role="alert" className="flex gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span>
+            <span className="font-medium">Check the sender: </span>
+            {email.warning}
+          </span>
+        </p>
+      )}
 
       {email.reason && (
         <p className="rounded-md bg-brand-50 px-3 py-2 text-sm text-brand-900">
@@ -169,14 +190,23 @@ export default function EmailDetail({ emailId, onChanged }) {
         </div>
       )}
 
+      {moving && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+          <span className="font-medium">Move to {other}:</span>
+          <button onClick={() => move(false)} disabled={!!busy} className={secondary}>
+            Only this email
+          </button>
+          <button onClick={() => move(true)} disabled={!!busy} className={secondary}>
+            Always for {email.sender}
+          </button>
+          <button onClick={() => setMoving(false)} className="px-2 py-1.5 text-slate-600 hover:underline">
+            Cancel
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-4">
-        <button
-          onClick={() =>
-            run('move', () => api(`/emails/${email.id}/priority`, { method: 'POST', body: { priority: other } }), `Moved to ${other}.`)
-          }
-          disabled={!!busy}
-          className={secondary}
-        >
+        <button onClick={() => setMoving(true)} disabled={!!busy || moving} className={secondary}>
           Move to {other}
         </button>
         <button

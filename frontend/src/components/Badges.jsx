@@ -17,6 +17,7 @@ export function EmailBadges({ email }) {
   return (
     <div className="flex flex-wrap gap-1">
       {email.priority && <Badge className={PRIORITY[email.priority]}>{email.priority}</Badge>}
+      {email.warning && <Badge className="bg-red-600 text-white ring-red-600">Check sender</Badge>}
       {email.category && <Badge>{email.category}</Badge>}
       {email.deadline && <Badge className="bg-amber-50 text-amber-800 ring-amber-200">Due {email.deadline}</Badge>}
       {email.meeting_label && (

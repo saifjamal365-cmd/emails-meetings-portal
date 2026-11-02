@@ -19,7 +19,8 @@ class SettingsBody(BaseModel):
 
 
 def _clean(domains: list[str]) -> list[str]:
-    """Lower-case, remove "@" and spaces, drop empty and repeated items."""
+    """Lower-case, remove spaces and a leading "@", drop empty and repeated items.
+    An item is a domain (acme.com) or a full address (sara@acme.com)."""
     result: list[str] = []
     for d in domains:
         d = d.strip().lower().lstrip("@")

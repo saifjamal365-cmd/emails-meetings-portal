@@ -8,6 +8,7 @@ Demo emails and meetings have ids starting with "demo-". Sending a reply to a de
 fails, because it is not in Gmail. Remove them with:  python -m scripts.seed_demo --clear
 """
 
+import re
 import sys
 from datetime import date, datetime, timedelta
 
@@ -15,7 +16,15 @@ from sqlalchemy import delete, select
 
 from app.agents import email_agent, meeting_agent
 from app.db import SessionLocal, init_db
-from app.models import Email, EmailAnalysis, EmailMeetingLink, Meeting, MeetingSummary, Task
+from app.models import (
+    Contact,
+    Email,
+    EmailAnalysis,
+    EmailMeetingLink,
+    Meeting,
+    MeetingSummary,
+    Task,
+)
 from app.services.llm_client import LLMJsonResult
 
 now = datetime.now().replace(second=0, microsecond=0)
@@ -82,7 +91,58 @@ DEMO = [
         200,
         ["INBOX", "UNREAD", "CATEGORY_PROMOTIONS"],
     ),
+    (
+        "orders@shop-online.com",
+        "Shop Online",
+        "Your order #8812 is confirmed",
+        "Thank you for your order. Total: USD 45. We will email you when it ships.",
+        60,
+        ["INBOX", "UNREAD", "CATEGORY_UPDATES"],
+    ),
+    (
+        "tracking@fastparcel.com",
+        "FastParcel",
+        "Your parcel is on the way",
+        "Your parcel 77812 left our warehouse and arrives on Thursday.",
+        75,
+        ["INBOX", "UNREAD"],
+    ),
+    (
+        "hr@my-company.com",
+        "HR Team",
+        "Team lunch on Thursday",
+        "Hi all,\nWe are planning a team lunch on Thursday at 1 pm. Lina will book the table.",
+        100,
+        ["INBOX", "UNREAD"],
+    ),
+    (
+        "khaled@partner-co.com",
+        "Khaled Mansour",
+        "Re: Meeting next week",
+        "Thanks for your email. Tuesday at 11 works for me. Shall I send the invite?",
+        15,
+        ["INBOX", "UNREAD"],
+    ),
+    (
+        "finance.office@quick-payments.net",
+        "CEO Office",
+        "Urgent: transfer needed today",
+        "Please make a wire transfer of USD 4,800 today to the bank account below. "
+        "Keep this confidential until the deal is closed.\nIBAN: XX00 0000 0000 0000",
+        5,
+        ["INBOX", "UNREAD", "IMPORTANT"],
+    ),
 ]
+
+# More about some demo emails: who got them, bulk headers, my conversation (sender -> fields)
+DEMO_EXTRA = {
+    "tracking@fastparcel.com": {"bulk_header": "auto-submitted"},
+    "news@techweekly.com": {"bulk_header": "list-unsubscribe"},
+    "hr@my-company.com": {"to_addrs": ["all-staff@my-company.com"], "cc_addrs": []},
+    "khaled@partner-co.com": {"in_my_thread": True},
+}
+# People "I wrote to before" in the demo (contacts come from Gmail Sent in real use)
+DEMO_CONTACTS = ["ahmad@alnoor-trading.sa", "sara@acme-logistics.com"]
 
 FAKE = {  # used with --no-llm
     # The "LLM" thinks this is Low. The demo meeting's keywords make it High (Phase 4).
@@ -115,6 +175,27 @@ FAKE = {  # used with --no-llm
         "An overdue invoice needs a payment.",
         "en",
         "Hello,\nThank you for the notice. We will pay invoice #4471 by [date].\nRegards",
+    ),
+    "my-company.com": (
+        "Low",
+        "Internal",
+        "An announcement to all staff; it asks nothing from you.",
+        "en",
+        "",
+    ),
+    "partner-co.com": (
+        "High",
+        "Partner",
+        "Confirms a meeting time and asks if he should send the invite.",
+        "en",
+        "Hi Khaled,\nTuesday at 11 is great. Yes, please send the invite.\nBest regards",
+    ),
+    "quick-payments.net": (
+        "High",
+        "Other",
+        "Asks for an urgent money transfer today.",
+        "en",
+        "",
     ),
 }
 
@@ -158,6 +239,24 @@ FAKE_SUMMARY = meeting_agent.MeetingOutput(
 DEMO_NOTE = "(demo)"
 
 
+def fake_email_llm(prompt, schema, **kwargs):
+    """The answer from FAKE for the sender's domain in the prompt ("From: name <a@b.com>")."""
+    domain = re.search(r"From: .*?<[^@>]+@([^>]+)>", prompt).group(1)
+    priority, category, reason, lang, draft = FAKE.get(
+        domain, ("High", "Other", "Needs a look.", "en", "")
+    )
+    decision = email_agent.EmailDecision(
+        priority=priority,
+        category=category,
+        reason=reason,
+        language=lang,
+        needs_reply=bool(draft),
+        deadline="",
+        draft_reply=draft,
+    )
+    return LLMJsonResult(data=decision, model="demo (no LLM)", input_tokens=0, output_tokens=0)
+
+
 def add_tasks(db) -> None:
     today = date.today()
     db.add_all(
@@ -188,6 +287,7 @@ def clear(db) -> None:
     db.execute(delete(Task).where(Task.source_type == "email", Task.source_id.in_(ids)))
     db.execute(delete(MeetingSummary).where(MeetingSummary.meeting_id.in_(meeting_ids)))
     db.execute(delete(Meeting).where(Meeting.id.in_(meeting_ids)))
+    db.execute(delete(Contact).where(Contact.address.in_(DEMO_CONTACTS)))
     db.commit()
     print(f"Removed {len(ids)} demo emails and {len(meeting_ids)} demo meetings.")
 
@@ -240,27 +340,15 @@ def main() -> None:
                     body=body,
                     received_at=now - timedelta(minutes=ago),
                     labels=labels,
+                    **DEMO_EXTRA.get(sender, {}),
                 )
             )
+        db.add_all(Contact(address=a, last_sent_at=now - timedelta(days=3)) for a in DEMO_CONTACTS)
         db.commit()
 
         if "--no-llm" in sys.argv:
-            for email in db.scalars(select(Email).where(Email.provider_id.like("demo-%"))):
-                fake = FAKE.get(email.sender_domain)
-                if fake:
-                    priority, category, reason, lang, draft = fake
-                    email.language = lang
-                    db.add(
-                        EmailAnalysis(
-                            email_id=email.id,
-                            priority=priority,
-                            category=category,
-                            reason=reason,
-                            draft_reply=draft,
-                            reply_status="Draft ready" if draft else "No reply needed",
-                        )
-                    )
-            db.commit()
+            # Ready-made "LLM" answers; the real rules, facts and warnings still run.
+            email_agent.ask_json = fake_email_llm
 
         add_meetings(db, fake="--no-llm" in sys.argv)
         add_tasks(db)

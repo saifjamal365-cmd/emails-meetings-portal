@@ -1,4 +1,5 @@
 """Gmail API client: read unread emails, send replies, mark as read and archive.
+Also reads the Sent folder (who I wrote to) and whether I already wrote in a conversation.
 
 The Google login itself lives in services/google_client.py.
 """
@@ -7,9 +8,9 @@ import base64
 import html
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
-from email.utils import parseaddr, parsedate_to_datetime
+from email.utils import getaddresses, parseaddr, parsedate_to_datetime
 
 from sqlalchemy.orm import Session
 
@@ -35,6 +36,9 @@ class FetchedEmail:
     body: str
     received_at: datetime
     labels: list[str] = field(default_factory=list)
+    to_addrs: list[str] = field(default_factory=list)
+    cc_addrs: list[str] = field(default_factory=list)
+    bulk_header: str = ""
 
     @property
     def sender_domain(self) -> str:
@@ -74,6 +78,27 @@ def _body(payload: dict) -> str:
     return _html_to_text("\n".join(html_parts))
 
 
+def _addresses(value: str) -> list[str]:
+    return [a.lower() for _, a in getaddresses([value]) if "@" in a]
+
+
+def bulk_header(headers: dict[str, str]) -> str:
+    """The first header that marks bulk or automatic mail, or "".
+
+    Auto-Submitted is the standard for automatic mail (RFC 3834); List-Unsubscribe and
+    List-Id are on newsletters and mailing lists (RFC 2369, RFC 2919); Precedence is old
+    but still common.
+    """
+    if headers.get("auto-submitted", "no").strip().lower() != "no":
+        return "auto-submitted"
+    for name in ("list-unsubscribe", "list-id"):
+        if headers.get(name):
+            return name
+    if headers.get("precedence", "").strip().lower() in ("bulk", "list", "junk"):
+        return "precedence"
+    return ""
+
+
 def _parse(message: dict) -> FetchedEmail:
     headers = {h["name"].lower(): h["value"] for h in message["payload"].get("headers", [])}
     name, address = parseaddr(headers.get("from", ""))
@@ -91,6 +116,9 @@ def _parse(message: dict) -> FetchedEmail:
         body=_body(message["payload"]),
         received_at=received,
         labels=message.get("labelIds", []),
+        to_addrs=_addresses(headers.get("to", "")),
+        cc_addrs=_addresses(headers.get("cc", "")),
+        bulk_header=bulk_header(headers),
     )
 
 
@@ -107,6 +135,35 @@ def fetch_unread(db: Session, max_results: int = 50) -> list[FetchedEmail]:
     for item in listing.get("messages", []):
         message = gmail.users().messages().get(userId="me", id=item["id"], format="full").execute()
         result.append(_parse(message))
+    return result
+
+
+def thread_has_my_message(db: Session, thread_id: str) -> bool:
+    """True if I already wrote in this Gmail conversation (a message there has SENT)."""
+    thread = _gmail(db).users().threads().get(userId="me", id=thread_id, format="minimal").execute()
+    return any("SENT" in m.get("labelIds", []) for m in thread.get("messages", []))
+
+
+def sent_recipients(
+    db: Session, since: datetime | None, max_results: int = 300
+) -> list[tuple[str, datetime]]:
+    """(address, sent time) for each To/Cc person in my Sent folder. First time: 1 year."""
+    since = since or datetime.now() - timedelta(days=365)
+    gmail = _gmail(db)
+    query = f"in:sent after:{int(since.timestamp())}"
+    result: list[tuple[str, datetime]] = []
+    listing = gmail.users().messages().list(userId="me", q=query, maxResults=max_results).execute()
+    for item in listing.get("messages", []):
+        message = (
+            gmail.users()
+            .messages()
+            .get(userId="me", id=item["id"], format="metadata", metadataHeaders=["To", "Cc"])
+            .execute()
+        )
+        headers = {h["name"].lower(): h["value"] for h in message["payload"].get("headers", [])}
+        sent_at = datetime.fromtimestamp(int(message.get("internalDate", "0")) / 1000)
+        for address in _addresses(headers.get("to", "")) + _addresses(headers.get("cc", "")):
+            result.append((address, sent_at))
     return result
 
 

@@ -1,12 +1,19 @@
 """Agent 1 - Email Priority Agent.
 
 For every unread email:
-  1. Rule check (fast, free): sender lists in Settings, "no-reply" senders, Gmail's
-     Social / Promotions tabs.
+  1. Rule check (fast, free), in this order:
+       your Always High list -> High;  your Always Low list -> Low;
+       a no-reply sender -> Low;  a reply in a conversation where you wrote -> High;
+       a bulk or automatic email (List-Unsubscribe, Auto-Submitted ... headers) -> Low;
+       someone you wrote to before (services/contacts.py) -> High;
+       Gmail's Social / Promotions / Updates / Forums tab, not marked Important -> Low.
   2. Meeting keyword check: keywords from meetings in the last 7 days (agents/linker.py).
   3. LLM check: priority, category, reason, deadline and a draft reply (structured JSON).
+     The LLM also gets the facts the portal found (only in Cc, Gmail Important ...).
   4. Save the result in email_analysis. A meeting link makes the email High and adds the
      label "Connected to meeting". The email now shows on the High or Low page.
+  5. A sender you never wrote to who asks for money, bank details or a password gets a
+     warning on the email.
 
 The agent never sends anything by itself. The user always clicks Send.
 """
@@ -26,7 +33,7 @@ from sqlalchemy.orm import Session
 from app.agents import linker
 from app.config import get_settings
 from app.models import ActivityLog, Email, EmailAnalysis
-from app.services import mail_client, tasks
+from app.services import contacts, google_client, mail_client, tasks
 from app.services.app_settings import get_app_settings
 from app.services.llm_client import LLMError, ask, ask_json
 from app.services.notify import notify
@@ -81,43 +88,155 @@ NO_REPLY = re.compile(r"^(no-?reply|do-?not-?reply|notifications?|mailer-daemon|
 ARABIC = re.compile(r"[؀-ۿ]")
 
 
-def _domain_in(domain: str, domains: list[str]) -> bool:
-    """True if domain is in the list, or is a sub-domain of one (mail.facebook.com)."""
-    domain = domain.lower()
-    return any(domain == d.lower() or domain.endswith("." + d.lower()) for d in domains if d)
+BULK_REASONS = {
+    "auto-submitted": "an automatic message",
+    "list-unsubscribe": "a newsletter or mass email (it has an unsubscribe link)",
+    "list-id": "sent to a mailing list",
+    "precedence": "marked as bulk mail",
+}
+GMAIL_LOW_TABS = {
+    "CATEGORY_SOCIAL": "Social",
+    "CATEGORY_PROMOTIONS": "Promotions",
+    "CATEGORY_UPDATES": "Updates",
+    "CATEGORY_FORUMS": "Forums",
+}
+SOCIAL_DOMAINS = (
+    "facebook.com", "facebookmail.com", "meta.com", "instagram.com", "linkedin.com", "x.com"
+)  # fmt: skip
+
+# Asks for money, bank details or a password (English and Arabic).
+PAYMENT_ASK = re.compile(
+    r"bank (account|details)|\biban\b|swift code|wire transfer|"
+    r"transfer (the )?(money|amount|funds|payment)|payment link|pay now|gift cards?|"
+    r"password|verify your account|login details|card number|"
+    r"حساب ?بنكي|الحساب البنكي|حسابكم البنكي|آيبان|ايبان|تحويل (مبلغ|المبلغ|الأموال)|حوالة|"
+    r"كلمة المرور|كلمة السر|بطاقات? هدايا|رقم البطاقة",
+    re.I,
+)
+PAYMENT_WARNING = (
+    "You never wrote to this sender, and the email asks for money, bank details or a "
+    "password. Check that it is real before you do anything."
+)
+
+
+@dataclass
+class RuleDecision:
+    priority: str  # "High" / "Low"
+    reason: str
+
+
+def _sender_in(email: Email, entries: list[str]) -> str | None:
+    """The list entry that matches the sender: a full address (sara@acme.com), or a domain
+    that also matches its sub-domains (facebook.com -> mail.facebook.com). None if none."""
+    address, domain = email.sender.lower(), email.sender_domain.lower()
+    for entry in entries:
+        entry = entry.lower()
+        if not entry:
+            continue
+        if "@" in entry:
+            if address == entry:
+                return entry
+        elif domain == entry or domain.endswith("." + entry):
+            return entry
+    return None
 
 
 def _guess_language(text: str) -> str:
     return "ar" if ARABIC.search(text) else "en"
 
 
-def rule_check(email: Email, high_domains: list[str], low_domains: list[str]) -> str | None:
-    """Return "High", "Low", or None when the rules cannot decide."""
-    if _domain_in(email.sender_domain, high_domains):
-        return "High"
-    if _domain_in(email.sender_domain, low_domains):
-        return "Low"
+def rule_check(
+    email: Email,
+    high_list: list[str],
+    low_list: list[str],
+    known_contacts: set[str] | frozenset[str] = frozenset(),
+) -> RuleDecision | None:
+    """The free checks, in order. None when the rules cannot decide (then the LLM decides)."""
+    labels = set(email.labels or [])
+    if match := _sender_in(email, high_list):
+        return RuleDecision("High", f"The sender ({match}) is in your Always High list.")
+    if match := _sender_in(email, low_list):
+        return RuleDecision("Low", f"The sender ({match}) is in your Always Low list.")
     if NO_REPLY.match(email.sender.split("@", 1)[0]):
-        return "Low"
-    if {"CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS"} & set(email.labels or []):
-        return "Low"
+        return RuleDecision("Low", "Sent from a no-reply address, so no answer is expected.")
+    if email.in_my_thread:
+        return RuleDecision("High", "A reply in a conversation where you already wrote.")
+    if email.bulk_header:
+        return RuleDecision("Low", f"The email is {BULK_REASONS[email.bulk_header]}.")
+    if email.sender.lower() in known_contacts:
+        return RuleDecision("High", "You wrote to this person before.")
+    tabs = [name for label, name in GMAIL_LOW_TABS.items() if label in labels]
+    if tabs and "IMPORTANT" not in labels:
+        return RuleDecision(
+            "Low", f"Gmail put it in the {tabs[0]} tab and did not mark it Important."
+        )
     return None
 
 
-def _low_by_rule(email: Email) -> EmailAnalysis:
+def facts(email: Email, me: str, known_contacts: set[str]) -> list[str]:
+    """What the portal knows about this email, for the LLM (it cannot see the headers)."""
+    result = []
     labels = set(email.labels or [])
-    social = "CATEGORY_SOCIAL" in labels or email.sender_domain.endswith(
-        ("facebook.com", "facebookmail.com", "meta.com", "instagram.com", "linkedin.com", "x.com")
-    )
+    if "IMPORTANT" in labels:
+        result.append("Gmail marked this email Important.")
+    tabs = [name for label, name in GMAIL_LOW_TABS.items() if label in labels]
+    if tabs:
+        result.append(f"Gmail put it in the {tabs[0]} tab.")
+    to, cc = email.to_addrs or [], email.cc_addrs or []
+    if me and (to or cc):
+        others = len(set(to + cc) - {me})
+        if me in to:
+            result.append(
+                f"Sent to the user and {others} other people."
+                if others
+                else "Sent only to the user."
+            )
+        elif me in cc:
+            result.append("The user is only in Cc, not in To.")
+        else:
+            result.append("The user is not in To or Cc (Bcc or a mailing list).")
+    if known_contacts and email.sender.lower() not in known_contacts:
+        result.append("The user never wrote to this sender.")
+    return result
+
+
+def payment_warning(email: Email, known_contacts: set[str]) -> str:
+    """A warning when a sender I never wrote to asks for money, bank details or a password.
+    Before the Sent folder is read (no contacts yet), every sender counts as unknown."""
+    if email.in_my_thread or email.sender.lower() in known_contacts:
+        return ""
+    if PAYMENT_ASK.search(f"{email.subject}\n{email.body}"):
+        return PAYMENT_WARNING
+    return ""
+
+
+def _low_by_rule(email: Email, reason: str) -> EmailAnalysis:
+    labels = set(email.labels or [])
+    social = "CATEGORY_SOCIAL" in labels or email.sender_domain.endswith(SOCIAL_DOMAINS)
     return EmailAnalysis(
         email_id=email.id,
         priority="Low",
         category="Social" if social else "Newsletter",
-        reason="Sender matches a Low rule (social, newsletter or no-reply sender).",
+        reason=reason,
         draft_reply="",
         reply_status="No reply needed",
         decided_by="rule",
     )
+
+
+def remember_sender(db: Session, email: Email, priority: str) -> str:
+    """The user moved an email and said "always": put the sender's address in that list and
+    take it out of the other one. Returns the address."""
+    settings = get_app_settings(db)
+    address = email.sender.lower()
+    high, low = list(settings.high_domains or []), list(settings.low_domains or [])
+    keep, drop = (high, low) if priority == "High" else (low, high)
+    if address not in keep:
+        keep.append(address)
+    if address in drop:
+        drop.remove(address)
+    settings.high_domains, settings.low_domains = high, low  # new lists, so the JSON is saved
+    return address
 
 
 def _email_for_llm(email: Email) -> str:
@@ -141,19 +260,30 @@ def _parse_date(value: str | None) -> date | None:
 def analyze_email(
     db: Session,
     email: Email,
-    fixed_priority: str | None = None,
+    rule: RuleDecision | None = None,
     links: list[linker.LinkCandidate] | None = None,
+    known_facts: list[str] | None = None,
+    warning: str = "",
 ) -> EmailAnalysis:
     """Ask the LLM for priority, category, reason and a draft reply. Saves the result.
 
+    `rule` = a rule already decided the priority (the LLM writes the rest).
     `links` = recent meetings this email is connected to. Their notes help the draft reply.
     After the LLM decides, the link makes the email High (see linker.save_links).
+    `known_facts` = what the portal found (see facts()); `warning` = see payment_warning().
     """
     prompt = f"Today is {date.today():%Y-%m-%d}.\n\n{_email_for_llm(email)}"
-    if fixed_priority:
+    if known_facts:
+        prompt += "\n\nFacts the portal found:\n" + "\n".join(f"- {f}" for f in known_facts)
+    if warning:
         prompt += (
-            f"\n\nThe user's sender rules say this email is {fixed_priority} priority. "
-            "Use that priority."
+            "\n\nSafety: the user never wrote to this sender, and the email asks for money, "
+            "bank details or a password. Do not promise any payment in the draft reply."
+        )
+    if rule:
+        prompt += (
+            f"\n\nThe portal's rules say this email is {rule.priority} priority "
+            f"({rule.reason}) Use that priority. In reason, say what the email asks for."
         )
     if links:
         prompt += (
@@ -163,17 +293,17 @@ def analyze_email(
         )
     result = ask_json(prompt, EmailDecision, system=PROMPT, max_tokens=4000, effort="medium")
     d = result.data
-    priority = fixed_priority or d.priority
 
     analysis = EmailAnalysis(
         email_id=email.id,
-        priority=priority,
+        priority=rule.priority if rule else d.priority,
         category=d.category,
-        reason=d.reason,
+        reason=f"{rule.reason} {d.reason}" if rule else d.reason,
         draft_reply=d.draft_reply if d.needs_reply else "",
         reply_status="Draft ready" if d.needs_reply and d.draft_reply else "No reply needed",
-        decided_by="rule" if fixed_priority else "llm",
+        decided_by="rule" if rule else "llm",
         deadline=_parse_date(d.deadline),
+        warning=warning,
     )
     email.language = d.language
     db.add(analysis)
@@ -204,6 +334,8 @@ def analyze_pending(db: Session, result: SyncResult | None = None) -> SyncResult
     """Give a priority to every unread email that has none yet."""
     result = result or SyncResult()
     settings = get_app_settings(db)
+    known_contacts = contacts.known(db)
+    me = (google_client.account(db) or ("", ""))[0].lower()
     pending = db.scalars(
         select(Email)
         .where(Email.is_read.is_(False), ~Email.analysis.has())
@@ -213,16 +345,24 @@ def analyze_pending(db: Session, result: SyncResult | None = None) -> SyncResult
         progress.to_analyze = len(pending)
 
     for email in pending:
-        decision = rule_check(email, settings.high_domains, settings.low_domains)
+        rule = rule_check(email, settings.high_domains, settings.low_domains, known_contacts)
         try:
-            if decision == "Low":
-                analysis = _low_by_rule(email)
+            if rule and rule.priority == "Low":
+                analysis = _low_by_rule(email, rule.reason)
                 email.language = _guess_language(email.subject + email.body)
                 db.add(analysis)
                 db.commit()
             else:
                 links = linker.find_links(db, email)
-                analysis = analyze_email(db, email, fixed_priority=decision, links=links)
+                in_high_list = _sender_in(email, settings.high_domains)
+                analysis = analyze_email(
+                    db,
+                    email,
+                    rule=rule,
+                    links=links,
+                    known_facts=facts(email, me, known_contacts),
+                    warning="" if in_high_list else payment_warning(email, known_contacts),
+                )
         except LLMError as e:
             db.rollback()
             result.errors.append(str(e))
@@ -233,6 +373,18 @@ def analyze_pending(db: Session, result: SyncResult | None = None) -> SyncResult
         else:
             result.low += 1
     return result
+
+
+def _in_my_thread(db: Session, f: mail_client.FetchedEmail) -> bool:
+    """Did I already write in this conversation? Gmail's thread id is the id of the first
+    message, so the first message of a thread needs no extra Gmail call."""
+    if not f.thread_id or f.thread_id == f.provider_id:
+        return False
+    try:
+        return mail_client.thread_has_my_message(db, f.thread_id)
+    except Exception:
+        log.warning("Could not read Gmail thread %s", f.thread_id, exc_info=True)
+        return False
 
 
 def sync(db: Session, lock_held: bool = False) -> SyncResult:
@@ -267,6 +419,10 @@ def sync(db: Session, lock_held: bool = False) -> SyncResult:
                         received_at=f.received_at,
                         is_read=False,
                         labels=f.labels,
+                        to_addrs=f.to_addrs,
+                        cc_addrs=f.cc_addrs,
+                        bulk_header=f.bulk_header,
+                        in_my_thread=_in_my_thread(db, f),
                     )
                 )
                 result.new += 1
@@ -281,6 +437,7 @@ def sync(db: Session, lock_held: bool = False) -> SyncResult:
                     email.is_read = True
         db.commit()
 
+        contacts.refresh_if_due(db)  # once a day: who I wrote to (Gmail Sent folder)
         progress.stage = "analyzing"
         analyze_pending(db, result)
         if result.high:

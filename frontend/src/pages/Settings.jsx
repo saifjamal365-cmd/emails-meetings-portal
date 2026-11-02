@@ -339,8 +339,11 @@ export default function Settings({ loginRequired }) {
       <section className="rounded-lg border border-slate-200 bg-surface p-4">
         <h3 className="mb-1 font-medium">Sender rules</h3>
         <p className="mb-3 text-sm text-slate-600">
-          One domain per line. Rules are checked before the LLM. Leave High empty to let the agent decide
-          (companies, clients and products become High).
+          One per line: a domain (<span className="font-mono">acme.com</span>, all its senders) or one address
+          (<span className="font-mono">sara@gmail.com</span>). These lists are checked first. &quot;Always for this
+          sender&quot; on an email adds its address here. Without a rule, the portal decides: people you wrote to
+          and replies in your conversations are High; newsletters, automatic mail and no-reply senders are Low;
+          the AI decides the rest.
         </p>
         <div className="grid grid-cols-2 gap-4">
           <label className="text-sm">
@@ -349,7 +352,7 @@ export default function Settings({ loginRequired }) {
               rows={8}
               value={high}
               onChange={(e) => setHigh(e.target.value)}
-              placeholder="acme.com"
+              placeholder={'acme.com\nsara@gmail.com'}
               className="w-full rounded-md border border-slate-300 p-2 font-mono text-sm"
             />
           </label>

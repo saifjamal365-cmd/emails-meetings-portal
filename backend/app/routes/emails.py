@@ -32,6 +32,7 @@ class EmailItem(BaseModel):
     reason: str | None
     reply_status: str | None
     deadline: date | None
+    warning: str = ""  # a sender I never wrote to asks for money, bank details or a password
     meeting_label: str | None = None  # "Weekly Sales Meeting (25 Sep)" if linked
 
 
@@ -66,6 +67,7 @@ def _item(email: Email, detail: bool = False) -> EmailItem:
         "reason": a.reason if a else None,
         "reply_status": a.reply_status if a else None,
         "deadline": a.deadline if a else None,
+        "warning": (a.warning or "") if a else "",
     }
     links = linker.active_links(email)
     if links:
@@ -216,6 +218,7 @@ class SendBody(BaseModel):
 
 class PriorityBody(BaseModel):
     priority: Literal["High", "Low"]
+    remember: bool = False  # also put the sender in the Always High / Always Low list
 
 
 def _analysis(db: DbSession, email: Email) -> EmailAnalysis:
@@ -272,6 +275,9 @@ def change_priority(email_id: int, body: PriorityBody, db: DbSession) -> EmailDe
     a.priority = body.priority
     a.decided_by = "user"
     a.reason = f"Changed to {body.priority} by you."
+    if body.remember:
+        address = email_agent.remember_sender(db, email, body.priority)
+        a.reason += f" New emails from {address} go to {body.priority} too (Settings)."
     db.commit()
     return _item(email, detail=True)
 

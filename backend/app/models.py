@@ -31,6 +31,13 @@ class Email(Base):
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     labels: Mapped[list[str]] = mapped_column(JSON, default=list)  # Gmail labels
     language: Mapped[str | None] = mapped_column(String(10))  # "ar", "en"
+    # Who got it (to see if it was sent to me, or I am only in Cc / one of many)
+    to_addrs: Mapped[list[str] | None] = mapped_column(JSON, default=list)
+    cc_addrs: Mapped[list[str] | None] = mapped_column(JSON, default=list)
+    # The first header that marks bulk or automatic mail ("list-unsubscribe", ...), or ""
+    bulk_header: Mapped[str | None] = mapped_column(String(40), default="")
+    # A reply in a Gmail conversation where I already wrote
+    in_my_thread: Mapped[bool | None] = mapped_column(Boolean, default=False)
 
     analysis: Mapped["EmailAnalysis | None"] = relationship(back_populates="email")
     meeting_links: Mapped[list["EmailMeetingLink"]] = relationship(back_populates="email")
@@ -51,9 +58,22 @@ class EmailAnalysis(Base):
     # "rule" / "llm" / "user" / "meeting" (made High by a meeting link)
     decided_by: Mapped[str] = mapped_column(String(10), default="llm")
     deadline: Mapped[date | None] = mapped_column(Date)  # if the email asks for a date
+    # A sender I never wrote to asks for money, bank details or a password
+    warning: Mapped[str | None] = mapped_column(Text, default="")
     analyzed_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     email: Mapped[Email] = relationship(back_populates="analysis")
+
+
+class Contact(Base):
+    """Someone I wrote to (from my Gmail Sent folder). A known contact makes an email High."""
+
+    __tablename__ = "contacts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    address: Mapped[str] = mapped_column(String(320), unique=True)
+    sent_count: Mapped[int] = mapped_column(Integer, default=1)
+    last_sent_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class OAuthToken(Base):
@@ -248,6 +268,8 @@ class AppSettings(Base):
     # Last message from the Google Meet browser extension (it is installed and working)
     extension_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
     connected_accounts: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Last time the contacts were read from the Gmail Sent folder (once a day)
+    contacts_synced_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class ActivityLog(Base):
